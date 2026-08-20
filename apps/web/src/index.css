@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+::selection {
+  background-color: theme("colors.accent");
+  color: theme("colors.bg");
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme("colors.border") theme("colors.bg");
+}
+
+/* Visible keyboard focus everywhere, per design skill's quality floor. */
+:focus-visible {
+  outline: 2px solid theme("colors.accent");
+  outline-offset: 2px;
+}
+
+body {
+  font-feature-settings: "tnum" 1; /* tabular numerals in a monospace UI */
+}

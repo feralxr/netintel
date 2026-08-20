@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786497592230,
+      "tag": "0000_mute_the_anarchist",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786700000000,
+      "tag": "0001_v2_explorer_dashboards_alerts_synthetics",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786800000000,
+      "tag": "0002_v2_6_auto_response_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786900000000,
+      "tag": "0003_v2_8_capacity_forecast",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787000000000,
+      "tag": "0004_v2_11_scheduled_reports",
+      "breakpoints": true
+    }
+  ]
+}

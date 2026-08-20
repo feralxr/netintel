@@ -1,0 +1,41 @@
+MIT License
+
+Copyright (c) 2026 netintel contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to
+deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.
+
+---
+
+## Why MIT (v1 decision, not the user's — flagged for revisit)
+
+The bible left this open between MIT and AGPL. MIT was chosen as the v1
+default because:
+
+- This is a personal-network tool aimed at maximum GitHub adoption, not a
+  product that needs defending against being SaaS-wrapped by a competitor.
+- AGPL's network-use clause adds friction for casual self-hosters and
+  contributors without a corresponding benefit here — there's no obvious
+  "someone wraps this as a paid SaaS" risk profile the way there is for,
+  say, a database engine.
+- MIT is the path of least resistance for people who just want to clone it,
+  run it on their home server, and maybe send a PR.
+
+This is easy to change before a real v1.0 tag if the project owner disagrees
+— it only gets harder to relicense after external contributors show up
+under the original license.

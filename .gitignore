@@ -1,0 +1,25 @@
+node_modules/
+dist/
+*.log
+
+# SQLite databases and WAL files (local dev data, never commit)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Build artifacts
+apps/web/dist/
+packages/*/dist/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local

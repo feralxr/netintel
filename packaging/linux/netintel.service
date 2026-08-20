@@ -1,0 +1,28 @@
+[Unit]
+Description=netintel - personal network intelligence server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust this path for your install:
+WorkingDirectory=/opt/netintel/packages/server
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+User=netintel
+Group=netintel
+
+# All config lives in packages/server/.env (see .env.example in that
+# directory) — copy it there and fill in your real values before starting
+# this service. systemd loads it natively via EnvironmentFile.
+EnvironmentFile=/opt/netintel/packages/server/.env
+
+# Restart-on-crash per the v1 bible's resilience section — combined with
+# systemd's own Restart=on-failure above, this is the "auto-restart on
+# crash" feature described there.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
