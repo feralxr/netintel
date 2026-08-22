@@ -10,6 +10,12 @@ import {
   networkReliability,
   dnsPerformance,
   upstreamComparison,
+  perClientLatencyBreakdown,
+  recursiveVsCachedRatioOverTime,
+  queryRetransmissionRate,
+  dnssecValidationRate,
+  protocolFeatureUsage,
+  responseSizeDistribution,
 } from "../../analytics/performance.js";
 
 export const performanceRoute = new Hono();
@@ -21,6 +27,13 @@ performanceRoute.get("/prefetch", (c) => c.json(prefetchScores(Number(c.req.quer
 performanceRoute.get("/latency-savings", (c) => c.json(latencySavingsEstimate())); // metric #23
 performanceRoute.get("/upstream-comparison", (c) => c.json(upstreamComparison())); // metric #24
 performanceRoute.get("/reliability", (c) => c.json(networkReliability())); // metric #25
+
+performanceRoute.get("/client-latency", (c) => c.json(perClientLatencyBreakdown(Number(c.req.query("limit") ?? 20)))); // #63
+performanceRoute.get("/recursive-cached-trend", (c) => c.json(recursiveVsCachedRatioOverTime())); // #64
+performanceRoute.get("/retransmission", (c) => c.json(queryRetransmissionRate())); // #65
+performanceRoute.get("/dnssec", (c) => c.json(dnssecValidationRate())); // #66
+performanceRoute.get("/protocol-features", (c) => c.json(protocolFeatureUsage())); // #67
+performanceRoute.get("/response-size", (c) => c.json(responseSizeDistribution())); // #68
 
 performanceRoute.get("/summary", (c) => {
   const today = new Date().toISOString().slice(0, 10);

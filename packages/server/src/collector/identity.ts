@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { devices, deviceIpHistory } from "../db/schema.js";
+import { devices, deviceIpHistory, dhcpLeaseEvents } from "../db/schema.js";
 import type { DhcpLease } from "./technitium-client.js";
 import { emitNotification } from "../notifications/engine.js";
 
@@ -125,10 +125,86 @@ export function resolveDeviceId(signal: IdentitySignal): string {
   return deviceId;
 }
 
+/** Latest recorded lease event for a MAC, if any (used by the diff below). */
+function getLatestLeaseEvent(mac: string) {
+  return db
+    .select()
+    .from(dhcpLeaseEvents)
+    .where(eq(dhcpLeaseEvents.mac, mac))
+    .orderBy(desc(dhcpLeaseEvents.recordedAt))
+    .limit(1)
+    .get();
+}
+
+/**
+ * Diffs the incoming lease against the last recorded event for its MAC and
+ * writes a dhcp_lease_events row only when something actually changed —
+ * every poll (default 30s, see poller.ts) re-sends the same lease list, so
+ * logging unconditionally would flood the table with no-op rows.
+ * Feeds metrics #91-94 (lease churn, duration distribution, IP/identity
+ * continuity, DHCP-to-DNS activity gap).
+ */
+function logLeaseEventIfChanged(lease: DhcpLease, now: string): void {
+  const last = getLatestLeaseEvent(lease.hardwareAddress);
+
+  let eventType: "new" | "renewed" | "ip_changed" | null = null;
+  if (!last || last.eventType === "expired") {
+    eventType = "new";
+  } else if (last.ipAddress !== lease.ipAddress) {
+    eventType = "ip_changed";
+  } else if (last.leaseExpires !== lease.leaseExpires) {
+    eventType = "renewed";
+  }
+
+  if (!eventType) return;
+
+  db.insert(dhcpLeaseEvents)
+    .values({
+      mac: lease.hardwareAddress,
+      clientIdentifier: lease.clientIdentifier,
+      ipAddress: lease.ipAddress,
+      hostName: lease.hostName,
+      leaseObtained: lease.leaseObtained,
+      leaseExpires: lease.leaseExpires,
+      eventType,
+      recordedAt: now,
+    })
+    .run();
+}
+
+/**
+ * Marks leases as expired for any MAC we were previously tracking that is
+ * absent from this poll's active list. Only fires once per lease (skips
+ * MACs whose latest event is already "expired") so an offline device
+ * doesn't generate a fresh expired row on every subsequent poll.
+ */
+function logExpiredLeases(activeMacs: Set<string>, now: string): void {
+  const trackedMacs = db.selectDistinct({ mac: dhcpLeaseEvents.mac }).from(dhcpLeaseEvents).all();
+  for (const { mac } of trackedMacs) {
+    if (activeMacs.has(mac)) continue;
+    const last = getLatestLeaseEvent(mac);
+    if (last && last.eventType !== "expired") {
+      db.insert(dhcpLeaseEvents)
+        .values({
+          mac,
+          clientIdentifier: last.clientIdentifier,
+          ipAddress: last.ipAddress,
+          hostName: last.hostName,
+          leaseObtained: last.leaseObtained,
+          leaseExpires: last.leaseExpires,
+          eventType: "expired",
+          recordedAt: now,
+        })
+        .run();
+    }
+  }
+}
+
 /** Syncs device identity/liveness straight from DHCP leases (most reliable signal). */
 export function syncFromDhcpLeases(leases: DhcpLease[]): void {
   const now = new Date().toISOString();
   const activeIps = new Set(leases.map((l) => l.ipAddress));
+  const activeMacs = new Set(leases.map((l) => l.hardwareAddress));
 
   for (const lease of leases) {
     resolveDeviceId({
@@ -137,7 +213,10 @@ export function syncFromDhcpLeases(leases: DhcpLease[]): void {
       hostname: lease.hostName,
       ip: lease.ipAddress,
     });
+    logLeaseEventIfChanged(lease, now);
   }
+
+  logExpiredLeases(activeMacs, now);
 
   // Anything not in the current lease list is no longer live — v1 scope only
   // surfaces active devices, so we flip isActive rather than deleting history.

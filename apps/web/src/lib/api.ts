@@ -12,6 +12,10 @@ async function apiGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+// Exported for pages that fetch one-off endpoints not worth adding a
+// dedicated typed wrapper for below — same base path, same error handling.
+export { apiGet };
+
 export const api = {
   status: () => apiGet<EngineStatus>("/status"),
   devices: () => apiGet<Device[]>("/devices"),

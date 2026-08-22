@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "../components/Layout";
 import { MetricCard } from "../components/MetricCard";
+import { MetricExplain } from "../components/MetricExplain";
+import { DataTable } from "../components/DataTable";
 import { TimeRangeControl, useTimeRange } from "../components/TimeRange";
 import { TrendChart } from "../components/charts/TrendChart";
 import { DistributionBar } from "../components/charts/DistributionBar";
+import { apiGet } from "../lib/api";
 
 interface SecuritySummary {
   queries: number;
@@ -35,6 +38,47 @@ interface BaselineResponse {
   streams: Record<string, BaselineStream> | null;
 }
 
+interface SuspiciousTld {
+  totalQueries: number;
+  watchedTldQueries: number;
+  share: number;
+  breakdown: { tld: string; count: number }[];
+  note: string;
+}
+interface PunycodeDomains {
+  totalDomains: number;
+  punycodeDomainCount: number;
+  domains: { domain: string; queryCount: number; firstSeen: string }[];
+  note: string;
+}
+interface TunnelingCandidate {
+  domain: string;
+  queryCount: number;
+  labelLength: number;
+  entropy: number;
+}
+interface TunnelingResponse {
+  candidates: TunnelingCandidate[];
+  note: string;
+}
+interface FailureBurst {
+  clientId: string;
+  burstStart: string;
+  burstEnd: string;
+  failureCount: number;
+}
+interface FailureBurstsResponse {
+  windowMinutes: number;
+  minFailuresInWindow: number;
+  bursts: FailureBurst[];
+  note: string;
+}
+interface BlocklistAttribution {
+  totalBlocked: number;
+  byCategory: { category: string; count: number; share: number }[];
+  note: string;
+}
+
 async function fetchSecuritySummary(): Promise<SecuritySummary> {
   const res = await fetch("/api/security/summary");
   if (!res.ok) throw new Error("failed to load security summary");
@@ -58,6 +102,11 @@ export function SecurityPage() {
   const { data } = useQuery({ queryKey: ["security-summary"], queryFn: fetchSecuritySummary, refetchInterval: 5000 });
   const { data: entropy } = useQuery({ queryKey: ["entropy"], queryFn: fetchEntropy, refetchInterval: 15000 });
   const { data: baseline } = useQuery({ queryKey: ["baseline"], queryFn: fetchBaseline, refetchInterval: 30000 });
+  const { data: suspiciousTlds } = useQuery({ queryKey: ["suspicious-tlds"], queryFn: () => apiGet<SuspiciousTld>("/security/suspicious-tlds"), refetchInterval: 30000 });
+  const { data: punycode } = useQuery({ queryKey: ["punycode"], queryFn: () => apiGet<PunycodeDomains>("/security/punycode"), refetchInterval: 30000 });
+  const { data: tunneling } = useQuery({ queryKey: ["tunneling"], queryFn: () => apiGet<TunnelingResponse>("/security/tunneling"), refetchInterval: 30000 });
+  const { data: failureBursts } = useQuery({ queryKey: ["failure-bursts"], queryFn: () => apiGet<FailureBurstsResponse>("/security/failure-bursts"), refetchInterval: 30000 });
+  const { data: blocklistAttribution } = useQuery({ queryKey: ["blocklist-attribution"], queryFn: () => apiGet<BlocklistAttribution>("/security/blocklist-attribution"), refetchInterval: 30000 });
 
   const entropyBarData = (entropy ?? []).slice(0, 10).map((e) => ({ name: e.domain, value: Number(e.entropy.toFixed(2)) }));
   const topBlockedBarData = (data?.topBlockedDomains ?? []).slice(0, 10).map((d) => ({ name: d.domain, value: d.count }));
@@ -144,6 +193,70 @@ export function SecurityPage() {
           controls={<span className="text-[10px] text-faint">candidate signal, not proof</span>}
         />
       </div>
+
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
+        <DistributionBar
+          title="Suspicious TLD exposure"
+          metricId="suspicious_tld_exposure"
+          data={(suspiciousTlds?.breakdown ?? []).map((b) => ({ name: `.${b.tld}`, value: b.count }))}
+          singleColor="#e0b84c"
+          height={240}
+          controls={<span className="text-[10px] text-faint">trend visibility only, not a block signal</span>}
+        />
+        <DistributionBar
+          title="Blocklist hit attribution"
+          metricId="blocklist_hit_attribution"
+          data={(blocklistAttribution?.byCategory ?? []).map((b) => ({ name: b.category, value: b.count }))}
+          singleColor="#ef4444"
+          height={240}
+        />
+      </div>
+
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
+        <div>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+            Punycode / homograph domains <MetricExplain metricId="punycode_homograph_detection" />
+          </h2>
+          <DataTable
+            rows={(punycode?.domains ?? []).map((d) => ({ domain: d.domain, queryCount: d.queryCount }))}
+            columns={[{ key: "domain", label: "Domain" }, { key: "queryCount", label: "Queries" }]}
+            emptyMessage="No punycode domains observed."
+          />
+        </div>
+        <div>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+            DNS tunneling heuristics <MetricExplain metricId="dns_tunneling_heuristics" />
+          </h2>
+          <DataTable
+            rows={(tunneling?.candidates ?? []).map((c) => ({ domain: c.domain, queryCount: c.queryCount, entropy: c.entropy.toFixed(2) }))}
+            columns={[
+              { key: "domain", label: "Domain" },
+              { key: "queryCount", label: "Queries" },
+              { key: "entropy", label: "Entropy" },
+            ]}
+            emptyMessage="No candidates flagged."
+          />
+        </div>
+      </div>
+
+      <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+        Repeated failure bursts <MetricExplain metricId="repeated_failure_burst_detection" />
+      </h2>
+      <DataTable
+        rows={(failureBursts?.bursts ?? []).map((b) => ({
+          clientId: b.clientId,
+          burstStart: new Date(b.burstStart).toLocaleString(),
+          burstEnd: new Date(b.burstEnd).toLocaleString(),
+          failureCount: b.failureCount,
+        }))}
+        columns={[
+          { key: "clientId", label: "Client" },
+          { key: "burstStart", label: "Burst start" },
+          { key: "burstEnd", label: "Burst end" },
+          { key: "failureCount", label: "Failures" },
+        ]}
+        emptyMessage="No repeated failure bursts detected."
+      />
     </Layout>
   );
 }

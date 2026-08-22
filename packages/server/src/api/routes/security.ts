@@ -4,6 +4,15 @@ import { db } from "../../db/client.js";
 import { domainDaily, notifications, dnsEvents } from "../../db/schema.js";
 import { nxdomainAnalysis, highEntropyDomains, newlyObservedDomains, unifiedSecurityAnalytics } from "../../analytics/security-metrics.js";
 import { behavioralBaseline, detectZScoreAnomalies } from "../../analytics/anomaly.js";
+import {
+  suspiciousTldExposure,
+  punycodeDomains,
+  dnsTunnelingHeuristics,
+  repeatedFailureBursts,
+  blocklistHitAttribution,
+  newDeviceSecurityBaseline,
+  alertToIncidentCorrelation,
+} from "../../analytics/security-metrics.js";
 
 export const securityRoute = new Hono();
 
@@ -13,6 +22,14 @@ securityRoute.get("/entropy", (c) => c.json(highEntropyDomains())); // metric #1
 securityRoute.get("/new-domains", (c) => c.json(newlyObservedDomains())); // metric #16
 securityRoute.get("/baseline", (c) => c.json(behavioralBaseline())); // metric #30
 securityRoute.get("/anomalies", (c) => c.json(detectZScoreAnomalies())); // metric #31
+
+securityRoute.get("/suspicious-tlds", (c) => c.json(suspiciousTldExposure())); // #56
+securityRoute.get("/punycode", (c) => c.json(punycodeDomains(Number(c.req.query("limit") ?? 50)))); // #57
+securityRoute.get("/tunneling", (c) => c.json(dnsTunnelingHeuristics())); // #58
+securityRoute.get("/failure-bursts", (c) => c.json(repeatedFailureBursts())); // #59
+securityRoute.get("/blocklist-attribution", (c) => c.json(blocklistHitAttribution())); // #60
+securityRoute.get("/device-baseline/:deviceId", (c) => c.json(newDeviceSecurityBaseline(c.req.param("deviceId")))); // #61
+securityRoute.get("/alert-correlation/:alertEventId", (c) => c.json(alertToIncidentCorrelation(c.req.param("alertEventId")))); // #62
 
 securityRoute.get("/summary", (c) => {
   const today = new Date().toISOString().slice(0, 10);

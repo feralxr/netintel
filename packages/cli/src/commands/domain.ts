@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import Table from "cli-table3";
 import { apiGet } from "../api-client.js";
+import { section, table, noDataNote } from "../output.js";
 
 interface DomainResponse {
   record: { domain: string; firstSeen: string; lastSeen: string; queryCount: number; uniqueDays: number; lifecycleState: string | null };
@@ -8,9 +9,27 @@ interface DomainResponse {
   dailyHistory: { date: string; queries: number; cacheHits: number; blocked: number; nxdomain: number }[];
   recentQueries: { timestamp: string; clientIp: string; responseCode: string; cached: boolean; blocked: boolean }[];
 }
+interface ResponseCodeDist {
+  total: number;
+  breakdown: { responseCode: string; count: number; share: number }[];
+}
+interface Burstiness {
+  fanoFactor: number | null;
+  sampleSize: number;
+  note: string | null;
+}
+interface Fragmentation {
+  distinctSubdomainCount: number;
+  subdomains: string[];
+}
 
 export async function domainCommand(domain: string): Promise<void> {
-  const data = await apiGet<DomainResponse>(`/api/domains/${encodeURIComponent(domain)}`);
+  const [data, responseCodes, burstiness, fragmentation] = await Promise.all([
+    apiGet<DomainResponse>(`/api/domains/${encodeURIComponent(domain)}`),
+    apiGet<ResponseCodeDist>(`/api/domains/${encodeURIComponent(domain)}/response-codes`), // #51
+    apiGet<Burstiness>(`/api/domains/${encodeURIComponent(domain)}/burstiness`), // #53
+    apiGet<Fragmentation>(`/api/domains/${encodeURIComponent(domain)}/fragmentation`), // #54
+  ]);
   const { record, category, dailyHistory, recentQueries } = data;
 
   console.log(chalk.bold(`\n${record.domain}\n`));
@@ -34,9 +53,9 @@ export async function domainCommand(domain: string): Promise<void> {
 
   if (recentQueries.length > 0) {
     console.log(chalk.bold("\n  Recent queries\n"));
-    const table = new Table({ head: ["Time", "Client", "Result", "Cached", "Blocked"] });
+    const table2 = new Table({ head: ["Time", "Client", "Result", "Cached", "Blocked"] });
     for (const q of recentQueries.slice(0, 10)) {
-      table.push([
+      table2.push([
         new Date(q.timestamp).toLocaleTimeString(),
         q.clientIp,
         q.responseCode,
@@ -44,7 +63,25 @@ export async function domainCommand(domain: string): Promise<void> {
         q.blocked ? "yes" : "no",
       ]);
     }
-    console.log(table.toString());
+    console.log(table2.toString());
   }
+
+  section("Response code distribution");
+  table(responseCodes.breakdown, [
+    { key: "responseCode", label: "Code" },
+    { key: "count", label: "Count" },
+    { key: "share", label: "Share", format: (v) => `${((v as number) * 100).toFixed(1)}%` },
+  ]);
+
+  section("Query burstiness");
+  if (burstiness.fanoFactor !== null) {
+    console.log(`  Fano factor: ${chalk.cyan(burstiness.fanoFactor.toFixed(2))} (from ${burstiness.sampleSize} queries)`);
+    console.log(chalk.dim("  ~1 = random spacing, >1 = bursty, <1 = unusually regular"));
+  } else {
+    noDataNote(burstiness.note);
+  }
+
+  section("Subdomain fragmentation");
+  console.log(`  ${fragmentation.distinctSubdomainCount} distinct subdomains observed.`);
   console.log();
 }

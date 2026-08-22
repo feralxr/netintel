@@ -7,6 +7,8 @@ import { timeOfDayBehavior, dayOfWeekBehavior, computeSessions, sessionSummary }
 import { categoryBreakdown, firstPartyVsThirdParty, trackingFootprint } from "../../analytics/categories-tracking.js";
 import { internetActivityTrends, topDomainDependency, ecosystemAnalysis, infrastructureDependency, entropyOfBrowsingBehavior, domainDiversityAndRepeatRatio } from "../../analytics/trends.js";
 import { weeklyReport, personalInternetFingerprint } from "../../analytics/reporting.js";
+import { categoryShareMomentum, seasonalPatternDetection, domainChurnRate, longTermRetentionCurve } from "../../analytics/trends.js";
+import { monthlyReport, toolUsageMetaMetrics, dataRetentionAndStorageFootprint } from "../../analytics/reporting.js";
 
 export const analyticsRoute = new Hono();
 
@@ -54,3 +56,11 @@ analyticsRoute.get("/diversity", (c) => c.json(domainDiversityAndRepeatRatio()))
 analyticsRoute.get("/weekly-report", (c) => c.json(weeklyReport())); // metric #47
 
 analyticsRoute.get("/fingerprint", (c) => c.json(personalInternetFingerprint())); // metric #48
+
+analyticsRoute.get("/category-momentum", (c) => c.json(categoryShareMomentum())); // #74
+analyticsRoute.get("/seasonal", (c) => c.json(seasonalPatternDetection(Number(c.req.query("weeks") ?? 4)))); // #75
+analyticsRoute.get("/churn", (c) => c.json(domainChurnRate())); // #76
+analyticsRoute.get("/retention", (c) => c.json(longTermRetentionCurve())); // #77
+analyticsRoute.get("/monthly-report", (c) => c.json(monthlyReport())); // #82
+analyticsRoute.get("/tool-usage", (c) => c.json(toolUsageMetaMetrics())); // #83
+analyticsRoute.get("/storage-footprint", (c) => c.json(dataRetentionAndStorageFootprint())); // #84

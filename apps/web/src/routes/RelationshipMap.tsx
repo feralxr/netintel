@@ -3,7 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, type SimulationNodeDatum, type SimulationLinkDatum } from "d3-force";
 import { Layout } from "../components/Layout";
 import { MetricExplain } from "../components/MetricExplain";
-import { relationshipGraph, type RelationshipGraph } from "../lib/api";
+import { MetricCard } from "../components/MetricCard";
+import { DataTable } from "../components/DataTable";
+import { relationshipGraph, type RelationshipGraph, api, apiGet } from "../lib/api";
 
 interface SimNode extends SimulationNodeDatum {
   id: string;
@@ -22,12 +24,54 @@ function clusterColor(clusterId: number): string {
   return CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length];
 }
 
+interface SessionOverlap {
+  maxConcurrentDevices: number;
+  overlapWindowCount: number;
+  note: string;
+}
+interface SequenceFingerprint {
+  sequence: string;
+  occurrences: number;
+}
+interface DwellEngagement {
+  clientId: string;
+  candidates: { registeredDomainSample: string; sessionStart: string; repeatQueries: number }[];
+  note: string;
+}
+interface AutomationClassifier {
+  clientId: string;
+  automationScore?: number;
+  avgPeriodicity?: number;
+  avgSessionDiversity?: number;
+  classification: "likely_automated" | "likely_human" | "mixed" | "unknown";
+  note: string;
+}
+
 export function RelationshipMapPage() {
   const { data, isLoading } = useQuery({ queryKey: ["relationship-graph"], queryFn: relationshipGraph, refetchInterval: 30000 });
   const [positions, setPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const simRef = useRef<ReturnType<typeof forceSimulation<SimNode>> | null>(null);
+
+  const { data: sessionOverlap } = useQuery({ queryKey: ["session-overlap"], queryFn: () => apiGet<SessionOverlap>("/behavioral/session-overlap"), refetchInterval: 30000 });
+  const { data: sequenceFingerprints } = useQuery({
+    queryKey: ["sequence-fingerprints"],
+    queryFn: () => apiGet<SequenceFingerprint[]>("/behavioral/sequence-fingerprints"),
+    refetchInterval: 60000,
+  });
+  const { data: devices } = useQuery({ queryKey: ["devices"], queryFn: api.devices });
+  const [selectedDevice, setSelectedDevice] = useState<string>("");
+  const { data: engagement } = useQuery({
+    queryKey: ["dwell-engagement", selectedDevice],
+    queryFn: () => apiGet<DwellEngagement>(`/behavioral/engagement/${selectedDevice}`),
+    enabled: !!selectedDevice,
+  });
+  const { data: automationClass } = useQuery({
+    queryKey: ["automation-classifier", selectedDevice],
+    queryFn: () => apiGet<AutomationClassifier>(`/behavioral/automation-classifier/${selectedDevice}`),
+    enabled: !!selectedDevice,
+  });
 
   const width = 900;
   const height = 560;
@@ -178,6 +222,63 @@ export function RelationshipMapPage() {
                   </div>
                 );
               })}
+          </div>
+        </div>
+      )}
+
+      <h2 className="mb-3 mt-8 flex items-center gap-1.5 text-sm font-semibold text-muted">
+        Behavioral patterns <MetricExplain metricId="multi_device_session_overlap" />
+      </h2>
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <MetricCard label="Max concurrent devices" value={sessionOverlap?.maxConcurrentDevices ?? "–"} />
+        <MetricCard label="Overlap windows" value={sessionOverlap?.overlapWindowCount ?? "–"} />
+      </div>
+
+      <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+        Recurring domain sequences <MetricExplain metricId="domain_sequence_fingerprint" />
+      </h2>
+      <div className="mb-6">
+        <DataTable
+          rows={sequenceFingerprints}
+          columns={[{ key: "sequence", label: "Sequence" }, { key: "occurrences", label: "Occurrences" }]}
+          emptyMessage="No recurring sequences found yet."
+        />
+      </div>
+
+      <div className="mb-3 flex items-center gap-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted">
+          Per-device engagement & automation classifier <MetricExplain metricId="automation_vs_human_pattern_classifier" />
+        </h2>
+        <select
+          value={selectedDevice}
+          onChange={(e) => setSelectedDevice(e.target.value)}
+          className="rounded border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-accent"
+        >
+          <option value="">Select a device…</option>
+          {(devices ?? []).map((d) => (
+            <option key={d.deviceId} value={d.deviceId}>
+              {d.hostname ?? d.deviceId}
+            </option>
+          ))}
+        </select>
+      </div>
+      {selectedDevice && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded border border-border bg-surface p-4 text-sm">
+            <p className="mb-2 text-xs text-faint">Classification</p>
+            <p className="text-lg text-text">{automationClass?.classification ?? "…"}</p>
+            {automationClass?.automationScore !== undefined && (
+              <p className="mt-1 text-xs text-faint">automation score: {automationClass.automationScore.toFixed(2)}</p>
+            )}
+            {automationClass?.note && <p className="mt-2 text-xs text-faint">{automationClass.note}</p>}
+          </div>
+          <div>
+            <p className="mb-2 text-xs text-faint">{engagement?.note}</p>
+            <DataTable
+              rows={engagement?.candidates.map((c) => ({ domain: c.registeredDomainSample, repeatQueries: c.repeatQueries }))}
+              columns={[{ key: "domain", label: "Domain" }, { key: "repeatQueries", label: "Repeat queries" }]}
+              emptyMessage="No engagement candidates for this device yet."
+            />
           </div>
         </div>
       )}

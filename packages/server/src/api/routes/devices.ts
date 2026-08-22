@@ -3,6 +3,13 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { devices, clientDaily, dnsEvents } from "../../db/schema.js";
 import { deviceAnalytics, deviceFingerprint, crossDeviceComparison } from "../../analytics/device-metrics.js";
+import {
+  deviceOnboardingTimeline,
+  idleDevices,
+  deviceCategoryAffinityShift,
+  devicesWithVendorHints,
+  deviceQueryRatePercentileRank,
+} from "../../analytics/device-metrics.js";
 
 export const devicesRoute = new Hono();
 
@@ -12,8 +19,12 @@ devicesRoute.get("/", (c) => {
   return c.json(rows);
 });
 
-// Metric #28 — must be registered before /:deviceId or "compare" gets swallowed as a device id.
+// Metric #28 and the new device-level list routes must be registered
+// before /:deviceId or their path segment gets swallowed as a device id.
 devicesRoute.get("/compare", (c) => c.json(crossDeviceComparison()));
+devicesRoute.get("/idle", (c) => c.json(idleDevices(Number(c.req.query("hours") ?? 6)))); // #70
+devicesRoute.get("/vendor-hints", (c) => c.json(devicesWithVendorHints())); // #72
+devicesRoute.get("/rate-rank", (c) => c.json(deviceQueryRatePercentileRank())); // #73
 
 devicesRoute.get("/:deviceId/analytics", (c) => {
   const deviceId = c.req.param("deviceId");
@@ -24,6 +35,9 @@ devicesRoute.get("/:deviceId/analytics", (c) => {
     fingerprint: deviceFingerprint(deviceId), // metric #27
   });
 });
+
+devicesRoute.get("/:deviceId/onboarding", (c) => c.json(deviceOnboardingTimeline(c.req.param("deviceId")))); // #69
+devicesRoute.get("/:deviceId/affinity-shift", (c) => c.json(deviceCategoryAffinityShift(c.req.param("deviceId")))); // #71
 
 devicesRoute.get("/:deviceId", (c) => {
   const deviceId = c.req.param("deviceId");

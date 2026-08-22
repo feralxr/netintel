@@ -24,6 +24,12 @@ export const dnsEvents = sqliteTable(
     upstream: text("upstream"),
     upstreamProtocol: text("upstream_protocol"),
     serverInstance: text("server_instance").notNull().default("primary"),
+    // v2.12 — raw answer string from Technitium's query log, when present.
+    // Feeds CNAME chain depth (#87) and future answer-shape metrics. Exact
+    // format (single record vs. full chain, delimiter) is UNCONFIRMED —
+    // needs live-instance verification before #87 is trusted, same as the
+    // TTL/upstream fields were.
+    answerData: text("answer_data"),
   },
   (t) => ({
     tsIdx: index("dns_events_ts_idx").on(t.timestamp),
@@ -289,4 +295,66 @@ export const generatedReports = sqliteTable("generated_reports", {
   format: text("format").notNull(),
   filePath: text("file_path").notNull(),
   fileSizeBytes: integer("file_size_bytes").notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// v2.12 — 100-metric expansion (#51-100)
+// ---------------------------------------------------------------------------
+
+// DHCP group (#91-94). One row per lease event observed on a poll — new
+// lease, renewal (same IP, extended leaseExpires), IP change, or an expiry
+// inferred when a previously-seen lease drops out of the active list.
+// Written by collector/identity.ts::syncFromDhcpLeases diffing against the
+// prior poll's lease set.
+export const dhcpLeaseEvents = sqliteTable(
+  "dhcp_lease_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    mac: text("mac").notNull(),
+    clientIdentifier: text("client_identifier"),
+    ipAddress: text("ip_address").notNull(),
+    hostName: text("host_name"),
+    leaseObtained: text("lease_obtained").notNull(),
+    leaseExpires: text("lease_expires"),
+    eventType: text("event_type").notNull(), // new | renewed | ip_changed | expired
+    recordedAt: text("recorded_at").notNull(),
+  },
+  (t) => ({
+    macIdx: index("dhcp_lease_events_mac_idx").on(t.mac),
+    recordedIdx: index("dhcp_lease_events_recorded_idx").on(t.recordedAt),
+  })
+);
+
+// Infrastructure group (#98, #100). Periodic snapshot of the netintel host
+// itself (not network devices) plus collector reachability at the same
+// instant, sampled every few minutes so #98/#100 have a real timeline
+// instead of a single live-only reading (infrastructure/health.ts and
+// collector/health.ts remain the live/in-memory source; this table is the
+// persisted history layer on top of them).
+export const hostHealthSamples = sqliteTable(
+  "host_health_samples",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    timestamp: text("timestamp").notNull(),
+    cpuLoadAvg1m: real("cpu_load_avg_1m"), // null on win32, see infrastructure/health.ts
+    memoryUsedPercent: real("memory_used_percent").notNull(),
+    diskAvailableBytes: integer("disk_available_bytes"),
+    technitiumReachable: integer("technitium_reachable", { mode: "boolean" }).notNull(),
+    technitiumLastError: text("technitium_last_error"),
+  },
+  (t) => ({
+    tsIdx: index("host_health_samples_ts_idx").on(t.timestamp),
+  })
+);
+
+// Infrastructure group (#99). One row per server process lifetime. Written
+// on boot (started_at); updated in place on a graceful shutdown handler
+// (ended_at + cleanShutdown=true). A row with ended_at still null when the
+// next boot occurs means that prior process ended uncleanly (crash/kill),
+// inferred at query time rather than guessed at write time.
+export const serverRestarts = sqliteTable("server_restarts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  startedAt: text("started_at").notNull(),
+  endedAt: text("ended_at"),
+  cleanShutdown: integer("clean_shutdown", { mode: "boolean" }).notNull().default(false),
 });

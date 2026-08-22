@@ -23,3 +23,7 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Internal dev/scoping docs — kept local only, not published
+/CONTEXT_HANDOFF.md
+/docs/NETINTEL_V1_BIBLE.md

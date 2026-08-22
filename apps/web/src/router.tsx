@@ -82,13 +82,39 @@ const syntheticsRoute = createRoute({
   component: lazyRouteComponent(() => import("./routes/Synthetics").then((m) => ({ default: m.SyntheticsPage }))),
 });
 
+const devicesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/devices",
+  component: lazyRouteComponent(() => import("./routes/Devices").then((m) => ({ default: m.DevicesPage }))),
+});
+
+const protocolRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/protocol",
+  component: lazyRouteComponent(() => import("./routes/Protocol").then((m) => ({ default: m.ProtocolPage }))),
+});
+
+const systemRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system",
+  component: lazyRouteComponent(() => import("./routes/System").then((m) => ({ default: m.SystemPage }))),
+});
+
+const reportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reports",
+  component: lazyRouteComponent(() => import("./routes/Reports").then((m) => ({ default: m.ReportsPage }))),
+});
+
 const routeTree = rootRoute.addChildren([
   overviewRoute,
   networkRoute,
+  devicesRoute,
   domainsRoute,
   domainDetailRoute,
   securityRoute,
   performanceRoute,
+  protocolRoute,
   historyRoute,
   mapRoute,
   explorerRoute,
@@ -96,6 +122,8 @@ const routeTree = rootRoute.addChildren([
   dashboardDetailRoute,
   alertsRoute,
   syntheticsRoute,
+  systemRoute,
+  reportsRoute,
 ]);
 
 export const router = createRouter({ routeTree });

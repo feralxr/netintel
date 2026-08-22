@@ -5,6 +5,8 @@ import { attachWebSocket } from "./api/ws.js";
 import { Poller } from "./collector/poller.js";
 import { startAnalyticsScheduler } from "./analytics/scheduler.js";
 import { reloadSyntheticsScheduler } from "./synthetics/scheduler.js";
+import { startHostHealthSampler } from "./infrastructure/sampler.js";
+import { recordServerStart, recordServerStop } from "./infrastructure/restarts.js";
 
 const PORT = Number(process.env.NETINTEL_PORT ?? 8787);
 
@@ -23,9 +25,12 @@ async function main() {
     console.log(`[netintel] api listening on http://localhost:${info.port}`);
   });
 
+  recordServerStart(); // #99 — logged as soon as we're actually up, before the shutdown handler can fire
+
   // @hono/node-server's return value wraps a plain node http.Server.
   attachWebSocket(server as unknown as import("node:http").Server);
   startAnalyticsScheduler();
+  startHostHealthSampler(); // #98/#100 — persisted host+collector health history
   reloadSyntheticsScheduler(); // loads any synthetic tests already saved in the DB from a previous run
 
   // Deliberately NOT awaited to block startup, and never throws (see
@@ -35,6 +40,19 @@ async function main() {
   const poller = new Poller({ baseUrl, apiToken });
   void poller.start();
   console.log(`[netintel] collector connecting to Technitium at ${baseUrl}...`);
+
+  // Records a clean-shutdown row for #99 so restart history can distinguish
+  // an intentional stop (service restart, `ctrl+c`) from a crash — a prior
+  // row still missing ended_at at next boot is inferred as unclean.
+  const shutdown = (signal: string) => {
+    console.log(`[netintel] received ${signal}, shutting down...`);
+    recordServerStop();
+    server.close(() => process.exit(0));
+    // Force-exit if close() hangs (e.g. a lingering keep-alive connection).
+    setTimeout(() => process.exit(0), 5000).unref();
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 main().catch((err) => {

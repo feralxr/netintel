@@ -222,3 +222,149 @@ export function networkReliability() {
     availability: total > 0 ? 1 - failed / total : 1,
   };
 }
+
+// -----------------------------------------------------------------------
+// Metric #63 — Per-Client Latency Breakdown
+//   Response-time distribution scoped per device, rather than #18's
+//   network-wide view — surfaces a single slow/misbehaving client that
+//   would otherwise be averaged away.
+// -----------------------------------------------------------------------
+export function perClientLatencyBreakdown(limit = 20) {
+  const rows = db
+    .select({ clientId: dnsEvents.clientId, responseTimeMs: dnsEvents.responseTimeMs })
+    .from(dnsEvents)
+    .all()
+    .filter((r) => r.clientId && r.responseTimeMs > 0);
+
+  const byClient = new Map<string, number[]>();
+  for (const r of rows) {
+    if (!byClient.has(r.clientId!)) byClient.set(r.clientId!, []);
+    byClient.get(r.clientId!)!.push(r.responseTimeMs);
+  }
+
+  return [...byClient.entries()]
+    .map(([clientId, latencies]) => ({ clientId, ...distribution(latencies) }))
+    .sort((a, b) => b.p95 - a.p95)
+    .slice(0, limit);
+}
+
+// -----------------------------------------------------------------------
+// Metric #64 — Recursive vs Cached Ratio Over Time
+//   Daily trend of the recursive/cache split — an early signal for cache
+//   tuning or TTL misconfiguration before it shows up as a latency problem.
+// -----------------------------------------------------------------------
+export function recursiveVsCachedRatioOverTime() {
+  const rows = db.select({ timestamp: dnsEvents.timestamp, cached: dnsEvents.cached }).from(dnsEvents).all();
+  const byDay = new Map<string, { cached: number; recursive: number }>();
+  for (const r of rows) {
+    const day = r.timestamp.slice(0, 10);
+    const bucket = byDay.get(day) ?? { cached: 0, recursive: 0 };
+    if (r.cached) bucket.cached++;
+    else bucket.recursive++;
+    byDay.set(day, bucket);
+  }
+  return [...byDay.entries()]
+    .map(([date, v]) => ({
+      date,
+      cached: v.cached,
+      recursive: v.recursive,
+      cacheHitRate: v.cached + v.recursive > 0 ? v.cached / (v.cached + v.recursive) : 0,
+    }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+// -----------------------------------------------------------------------
+// Metric #65 — Query Retransmission Rate
+//   Approximation: same client querying the same domain again within a
+//   short window (default 2s) of a prior query for that domain — consistent
+//   with a resolver/app retrying after a slow or failed lookup. This is a
+//   proxy from query-log timing alone, not a true retransmission count from
+//   the wire (Technitium's query log doesn't expose retry/retransmit flags).
+// -----------------------------------------------------------------------
+export function queryRetransmissionRate(windowSeconds = 2) {
+  const rows = db
+    .select({ clientId: dnsEvents.clientId, domain: dnsEvents.domain, timestamp: dnsEvents.timestamp })
+    .from(dnsEvents)
+    .all()
+    .filter((r) => r.clientId)
+    .sort((a, b) => (a.timestamp < b.timestamp ? -1 : 1));
+
+  const windowMs = windowSeconds * 1000;
+  const lastSeen = new Map<string, number>(); // key: clientId|domain
+  let retransmits = 0;
+
+  for (const r of rows) {
+    const key = `${r.clientId}|${r.domain}`;
+    const t = new Date(r.timestamp).getTime();
+    const prev = lastSeen.get(key);
+    if (prev !== undefined && t - prev <= windowMs) retransmits++;
+    lastSeen.set(key, t);
+  }
+
+  return {
+    totalQueries: rows.length,
+    candidateRetransmits: retransmits,
+    rate: rows.length > 0 ? retransmits / rows.length : 0,
+    windowSeconds,
+    note: "Proxy from query-log timing (same client+domain within the window), not a true wire-level retransmit count.",
+  };
+}
+
+// -----------------------------------------------------------------------
+// Metric #66 — DNSSEC Validation Rate
+// KNOWN GAP: Technitium's /api/logs/query response fields this collector
+// reads (see technitium-client.ts) do not include a DNSSEC validation
+// status. Reports "no data" honestly rather than guessing, same discipline
+// as the TTL/upstream gaps.
+// -----------------------------------------------------------------------
+export function dnssecValidationRate() {
+  return {
+    hasData: false,
+    note: "DNSSEC validation status is not exposed by the fields netintel currently reads from Technitium's query log — needs confirmation against a live instance's full API response before this can be wired up.",
+    validated: null,
+    unvalidated: null,
+    bogus: null,
+  };
+}
+
+// -----------------------------------------------------------------------
+// Metric #67 — EDNS/Protocol Feature Usage
+//   Protocol distribution (UDP/TCP/DoT/DoH/DoQ) IS real data from
+//   dns_events.protocol. EDNS0 flag usage and TC-bit (truncated response)
+//   detection are NOT currently captured by the collector — reported
+//   honestly as unavailable rather than guessed.
+// -----------------------------------------------------------------------
+export function protocolFeatureUsage() {
+  const rows = db.select({ protocol: dnsEvents.protocol }).from(dnsEvents).all();
+  const total = rows.length;
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.protocol, (counts.get(r.protocol) ?? 0) + 1);
+
+  // DNS-over-TCP fallback specifically = TCP queries as a share of all
+  // queries; a rising share can indicate truncated-response (large answer)
+  // conditions even without a direct TC-bit flag.
+  const tcpCount = counts.get("TCP") ?? 0;
+
+  return {
+    totalQueries: total,
+    protocolBreakdown: [...counts.entries()]
+      .map(([protocol, count]) => ({ protocol, count, share: total > 0 ? count / total : 0 }))
+      .sort((a, b) => b.count - a.count),
+    tcpFallbackShare: total > 0 ? tcpCount / total : 0,
+    edns0Usage: { hasData: false, note: "Not exposed by the fields netintel currently reads from Technitium's query log." },
+    truncatedResponses: { hasData: false, note: "Not exposed by the fields netintel currently reads from Technitium's query log." },
+  };
+}
+
+// -----------------------------------------------------------------------
+// Metric #68 — Response Size Distribution
+// KNOWN GAP: Technitium's query log fields this collector reads do not
+// include a response payload size. Reports "no data" honestly.
+// -----------------------------------------------------------------------
+export function responseSizeDistribution() {
+  return {
+    hasData: false,
+    note: "Response payload size is not exposed by the fields netintel currently reads from Technitium's query log — needs confirmation against a live instance before this can be wired up.",
+    distribution: null,
+  };
+}

@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "../components/Layout";
 import { MetricCard } from "../components/MetricCard";
+import { MetricExplain } from "../components/MetricExplain";
+import { DataTable } from "../components/DataTable";
 import { useTimeRange } from "../components/TimeRange";
 import { TrendChart } from "../components/charts/TrendChart";
+import { SeriesLineChart } from "../components/charts/SeriesLineChart";
 import { DonutChart } from "../components/charts/DonutChart";
 import { RadarChartCard } from "../components/charts/RadarChartCard";
-import { api } from "../lib/api";
+import { api, apiGet } from "../lib/api";
 
 interface WeeklyReport {
   period: { from: string; to: string };
@@ -41,6 +44,31 @@ async function fetchFingerprint(): Promise<Fingerprint> {
   return res.json();
 }
 
+interface CategoryMomentum {
+  category: string;
+  shareBefore: number;
+  shareAfter: number;
+  momentumPercentagePoints: number;
+}
+interface SeasonalDay {
+  date: string;
+  dayOfWeek: string;
+  actual: number;
+  historicalAvgForWeekday: number;
+  deviationPercent: number | null;
+}
+interface ChurnRate {
+  added: number;
+  dropped: number;
+  totalDomainsEitherPeriod: number;
+  churnRate: number;
+}
+interface RetentionBucket {
+  days: number;
+  cohortSize: number;
+  stillActiveShare: number | null;
+}
+
 export function HistoryPage() {
   const [range] = useTimeRange("30d");
   const { data: report } = useQuery({ queryKey: ["weekly-report"], queryFn: fetchWeeklyReport, refetchInterval: 30000 });
@@ -50,6 +78,10 @@ export function HistoryPage() {
     queryFn: () => api.notifications(50),
     refetchInterval: 10000,
   });
+  const { data: categoryMomentum } = useQuery({ queryKey: ["category-momentum"], queryFn: () => apiGet<CategoryMomentum[]>("/analytics/category-momentum"), refetchInterval: 60000 });
+  const { data: seasonal } = useQuery({ queryKey: ["seasonal"], queryFn: () => apiGet<SeasonalDay[]>("/analytics/seasonal"), refetchInterval: 60000 });
+  const { data: churn } = useQuery({ queryKey: ["churn"], queryFn: () => apiGet<ChurnRate>("/analytics/churn"), refetchInterval: 60000 });
+  const { data: retention } = useQuery({ queryKey: ["retention"], queryFn: () => apiGet<RetentionBucket[]>("/analytics/retention"), refetchInterval: 60000 });
 
   const insights = (notifications ?? []).filter((n) => n.category === "insights");
 
@@ -123,6 +155,63 @@ export function HistoryPage() {
           value={fingerprint ? `${(fingerprint.trackerRatio * 100).toFixed(1)}%` : "–"}
         />
         <MetricCard label="Peak hour" value={fingerprint ? `${fingerprint.peakHour}:00` : "–"} />
+      </div>
+
+      <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+        Category share momentum <MetricExplain metricId="category_share_momentum" />
+      </h2>
+      <div className="mb-8">
+        <DataTable
+          rows={(categoryMomentum ?? []).map((c) => ({
+            category: c.category,
+            shareBefore: `${(c.shareBefore * 100).toFixed(1)}%`,
+            shareAfter: `${(c.shareAfter * 100).toFixed(1)}%`,
+            momentum: `${c.momentumPercentagePoints > 0 ? "+" : ""}${c.momentumPercentagePoints.toFixed(1)}pp`,
+          }))}
+          columns={[
+            { key: "category", label: "Category" },
+            { key: "shareBefore", label: "Last week" },
+            { key: "shareAfter", label: "This week" },
+            { key: "momentum", label: "Momentum" },
+          ]}
+        />
+      </div>
+
+      <div className="mb-8 grid gap-4 md:grid-cols-2">
+        <div>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+            Seasonal pattern <MetricExplain metricId="seasonal_pattern_detection" />
+          </h2>
+          <SeriesLineChart
+            title="Actual vs historical average by weekday"
+            data={(seasonal ?? []).map((d) => ({ label: d.dayOfWeek.slice(0, 3), actual: d.actual, historicalAvg: d.historicalAvgForWeekday }))}
+            seriesKeys={["actual", "historicalAvg"]}
+            chartType="line"
+            height={220}
+          />
+        </div>
+        <div>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+            Domain churn & retention <MetricExplain metricId="domain_churn_rate" />
+          </h2>
+          <div className="mb-3 grid grid-cols-3 gap-3">
+            <MetricCard label="Added" value={churn?.added ?? "–"} />
+            <MetricCard label="Dropped" value={churn?.dropped ?? "–"} />
+            <MetricCard label="Churn rate" value={churn ? `${(churn.churnRate * 100).toFixed(1)}%` : "–"} />
+          </div>
+          <DataTable
+            rows={(retention ?? []).map((r) => ({
+              days: `${r.days}d`,
+              cohortSize: r.cohortSize,
+              stillActiveShare: r.stillActiveShare !== null ? `${(r.stillActiveShare * 100).toFixed(0)}%` : "no cohort",
+            }))}
+            columns={[
+              { key: "days", label: "Cohort age" },
+              { key: "cohortSize", label: "Cohort size" },
+              { key: "stillActiveShare", label: "Still active" },
+            ]}
+          />
+        </div>
       </div>
 
       <h2 className="mb-3 text-sm font-semibold text-muted">Insight notifications so far</h2>

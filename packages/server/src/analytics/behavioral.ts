@@ -1,8 +1,8 @@
 import { db } from "../db/client.js";
-import { dnsEvents, domains } from "../db/schema.js";
+import { dnsEvents, domains, devices } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { domainRevisitIntervals } from "./domain-metrics.js";
-import { timeOfDayBehavior, dayOfWeekBehavior } from "./time-behavior.js";
+import { timeOfDayBehavior, dayOfWeekBehavior, computeSessions } from "./time-behavior.js";
 import { categoryBreakdown } from "./categories-tracking.js";
 
 // -----------------------------------------------------------------------
@@ -128,4 +128,129 @@ export function internetRoutine() {
     lowActivityHours: lowActivityHours.map((h) => h.hour),
     peakHour: byHour.peakHour,
   };
+}
+
+// -----------------------------------------------------------------------
+// Metric #78 — Multi-Device Session Overlap
+//   Detects concurrent active sessions across devices — household/office
+//   usage-overlap context (e.g. "everyone's online 7-9pm"), not any form
+//   of cross-device identity linking.
+// -----------------------------------------------------------------------
+export function multiDeviceSessionOverlap() {
+  const activeDevices = db.select().from(devices).where(eq(devices.isActive, true)).all();
+  const allSessions = activeDevices.flatMap((d) => computeSessions(d.deviceId));
+
+  if (allSessions.length === 0) return { overlaps: [], maxConcurrentDevices: 0 };
+
+  // Sweep-line over session start/end events to find max concurrency and
+  // notable overlap windows (>=2 devices active at once).
+  type Point = { t: number; delta: number; clientId: string };
+  const points: Point[] = [];
+  for (const s of allSessions) {
+    points.push({ t: new Date(s.start).getTime(), delta: 1, clientId: s.clientId });
+    points.push({ t: new Date(s.end).getTime(), delta: -1, clientId: s.clientId });
+  }
+  points.sort((a, b) => a.t - b.t);
+
+  let concurrent = 0;
+  let maxConcurrent = 0;
+  const overlapWindows: { start: string; deviceCount: number }[] = [];
+  for (const p of points) {
+    concurrent += p.delta;
+    if (concurrent > maxConcurrent) maxConcurrent = concurrent;
+    if (concurrent >= 2) overlapWindows.push({ start: new Date(p.t).toISOString(), deviceCount: concurrent });
+  }
+
+  return {
+    maxConcurrentDevices: maxConcurrent,
+    overlapWindowCount: overlapWindows.length,
+    note: "Reflects concurrent session activity, not identity-linking between devices.",
+  };
+}
+
+// -----------------------------------------------------------------------
+// Metric #79 — Domain Sequence Fingerprint
+//   Short recurring A->B->C in-session navigation sequences, treated as a
+//   fingerprint of routine behavior (e.g. a morning news->email->work chain).
+// -----------------------------------------------------------------------
+export function domainSequenceFingerprint(minOccurrences = 3, sequenceLength = 3, limit = 15) {
+  const activeDevices = db.select().from(devices).where(eq(devices.isActive, true)).all();
+  const allSessions = activeDevices.flatMap((d) => computeSessions(d.deviceId));
+
+  const sequenceCounts = new Map<string, number>();
+  for (const s of allSessions) {
+    const seq = s.domainSequence;
+    for (let i = 0; i + sequenceLength <= seq.length; i++) {
+      const chunk = seq.slice(i, i + sequenceLength);
+      if (new Set(chunk).size === 1) continue; // skip trivial A->A->A repeats
+      const key = chunk.join(" -> ");
+      sequenceCounts.set(key, (sequenceCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  return [...sequenceCounts.entries()]
+    .filter(([, count]) => count >= minOccurrences)
+    .map(([sequence, count]) => ({ sequence, occurrences: count }))
+    .sort((a, b) => b.occurrences - a.occurrences)
+    .slice(0, limit);
+}
+
+// -----------------------------------------------------------------------
+// Metric #80 — Dwell-Implied Engagement
+//   WEAK proxy only: repeat sub-resolution queries (a domain and its
+//   subdomains queried multiple times within one session) as a stand-in
+//   for engagement. Explicitly NOT real dwell time or page-level activity —
+//   DNS cannot observe that.
+// -----------------------------------------------------------------------
+export function dwellImpliedEngagement(clientId: string, limit = 15) {
+  const sessions = computeSessions(clientId);
+  const results: { registeredDomainSample: string; sessionStart: string; repeatQueries: number }[] = [];
+
+  for (const s of sessions) {
+    const counts = new Map<string, number>();
+    for (const d of s.domainSequence) counts.set(d, (counts.get(d) ?? 0) + 1);
+    for (const [domain, count] of counts.entries()) {
+      if (count >= 3) results.push({ registeredDomainSample: domain, sessionStart: s.start, repeatQueries: count });
+    }
+  }
+
+  return {
+    clientId,
+    candidates: results.sort((a, b) => b.repeatQueries - a.repeatQueries).slice(0, limit),
+    note: "A weak DNS-only proxy for engagement (repeat queries within a session) — never real page dwell time, which DNS traffic cannot observe.",
+  };
+}
+
+// -----------------------------------------------------------------------
+// Metric #81 — Automation vs Human Pattern Classifier
+//   Combines #41's periodicity with #8's session diversity into one score:
+//   high periodicity + low diversity leans "automated/scripted"; low
+//   periodicity + high diversity leans "human-driven browsing".
+// -----------------------------------------------------------------------
+export function automationVsHumanClassifier(clientId: string) {
+  const sessions = computeSessions(clientId);
+  if (sessions.length === 0) {
+    return { clientId, classification: "unknown" as const, note: "No session history yet for this device." };
+  }
+
+  const avgDiversity = sessions.reduce((s, sess) => s + sess.diversity, 0) / sessions.length;
+
+  const clientDomains = db.select({ domain: dnsEvents.domain }).from(dnsEvents).where(eq(dnsEvents.clientId, clientId)).all();
+  const uniqueDomains = [...new Set(clientDomains.map((d) => d.domain))];
+  const domainRows = uniqueDomains.length > 0 ? db.select().from(domains).all().filter((d) => uniqueDomains.includes(d.domain)) : [];
+
+  const periodicityScores = domainRows
+    .filter((d) => d.queryCount >= 5)
+    .map((d) => {
+      const dist = domainRevisitIntervals(d.domain);
+      const cv = dist.mean > 0 ? dist.stddev / dist.mean : 1;
+      return Math.max(0, 1 - Math.min(cv, 1));
+    });
+  const avgPeriodicity = periodicityScores.length > 0 ? periodicityScores.reduce((a, b) => a + b, 0) / periodicityScores.length : 0;
+
+  // automationScore in [0,1]: high periodicity + low session diversity -> automated
+  const automationScore = 0.5 * avgPeriodicity + 0.5 * (1 - avgDiversity);
+  const classification = automationScore > 0.65 ? "likely_automated" : automationScore < 0.35 ? "likely_human" : "mixed";
+
+  return { clientId, automationScore, avgPeriodicity, avgSessionDiversity: avgDiversity, classification, note: "Heuristic classification, not a certainty — a single device running both apps and background services will land in 'mixed'." };
 }

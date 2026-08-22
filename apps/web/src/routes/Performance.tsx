@@ -2,9 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Layout } from "../components/Layout";
 import { MetricCard } from "../components/MetricCard";
 import { MetricExplain } from "../components/MetricExplain";
+import { DataTable } from "../components/DataTable";
 import { TimeRangeControl, useTimeRange } from "../components/TimeRange";
 import { TrendChart } from "../components/charts/TrendChart";
+import { SeriesLineChart } from "../components/charts/SeriesLineChart";
 import { DistributionBar } from "../components/charts/DistributionBar";
+import { apiGet } from "../lib/api";
 
 interface PerformanceSummary {
   queries: number;
@@ -93,6 +96,33 @@ function percentileLadder(d: Distribution | null | undefined) {
   ];
 }
 
+interface ClientLatency {
+  clientId: string;
+  mean: number;
+  p95: number;
+  count: number;
+}
+interface RecursiveCachedDay {
+  date: string;
+  cached: number;
+  recursive: number;
+  cacheHitRate: number;
+}
+interface RetransmissionResponse {
+  totalQueries: number;
+  candidateRetransmits: number;
+  rate: number;
+  windowSeconds: number;
+  note: string;
+}
+interface ProtocolFeatures {
+  totalQueries: number;
+  protocolBreakdown: { protocol: string; count: number; share: number }[];
+  tcpFallbackShare: number;
+  edns0Usage: { hasData: boolean; note: string };
+  truncatedResponses: { hasData: boolean; note: string };
+}
+
 export function PerformancePage() {
   const [range, setRange] = useTimeRange("24h");
   const { data } = useQuery({
@@ -113,6 +143,14 @@ export function PerformancePage() {
   });
   const { data: dnsPerf } = useQuery({ queryKey: ["dns-perf"], queryFn: fetchDnsPerformance, refetchInterval: 10000 });
   const { data: ttl } = useQuery({ queryKey: ["ttl"], queryFn: fetchTtl, refetchInterval: 15000 });
+  const { data: clientLatency } = useQuery({ queryKey: ["client-latency"], queryFn: () => apiGet<ClientLatency[]>("/performance/client-latency"), refetchInterval: 15000 });
+  const { data: recursiveCachedTrend } = useQuery({
+    queryKey: ["recursive-cached-trend"],
+    queryFn: () => apiGet<RecursiveCachedDay[]>("/performance/recursive-cached-trend"),
+    refetchInterval: 30000,
+  });
+  const { data: retransmission } = useQuery({ queryKey: ["retransmission"], queryFn: () => apiGet<RetransmissionResponse>("/performance/retransmission"), refetchInterval: 30000 });
+  const { data: protocolFeatures } = useQuery({ queryKey: ["protocol-features"], queryFn: () => apiGet<ProtocolFeatures>("/performance/protocol-features"), refetchInterval: 30000 });
 
   const prefetchBarData = (prefetch ?? []).map((p) => ({ name: p.domain, value: Number(p.score.toFixed(3)) }));
   const upstreamLatencyBarData = (upstream?.upstreams ?? []).map((u) => ({ name: u.upstream, value: Number(u.avgLatencyMs.toFixed(1)) }));
@@ -265,6 +303,55 @@ export function PerformancePage() {
       </div>
 
       {data?.note && <p className="mt-6 text-xs text-faint">{data.note}</p>}
+
+      <h2 className="mb-3 mt-8 text-sm font-semibold text-muted">Recursive vs cached ratio over time</h2>
+      <div className="mb-6">
+        <SeriesLineChart
+          title="Cache hit rate trend"
+          metricId="recursive_vs_cached_ratio_over_time"
+          data={(recursiveCachedTrend ?? []).map((d) => ({ label: d.date.slice(5), cached: d.cached, recursive: d.recursive }))}
+          seriesKeys={["cached", "recursive"]}
+          chartType="area"
+        />
+      </div>
+
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
+        <MetricCard
+          label="Retransmission rate"
+          value={retransmission ? `${(retransmission.rate * 100).toFixed(2)}%` : "–"}
+          metricId="query_retransmission_rate"
+        />
+        <MetricCard
+          label="TCP fallback share"
+          value={protocolFeatures ? `${(protocolFeatures.tcpFallbackShare * 100).toFixed(2)}%` : "–"}
+          metricId="edns_protocol_feature_usage"
+        />
+        <MetricCard label="Protocols observed" value={protocolFeatures?.protocolBreakdown.length ?? "–"} />
+      </div>
+
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
+        <DistributionBar
+          title="Protocol distribution"
+          metricId="edns_protocol_feature_usage"
+          data={(protocolFeatures?.protocolBreakdown ?? []).map((p) => ({ name: p.protocol, value: p.count }))}
+          singleColor="#7dd3a0"
+          height={240}
+        />
+        <div>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+            Per-client latency <MetricExplain metricId="per_client_latency_breakdown" />
+          </h2>
+          <DataTable
+            rows={(clientLatency ?? []).slice(0, 10).map((c) => ({ clientId: c.clientId, meanMs: c.mean.toFixed(1), p95Ms: c.p95.toFixed(1), count: c.count }))}
+            columns={[
+              { key: "clientId", label: "Client" },
+              { key: "meanMs", label: "Mean (ms)" },
+              { key: "p95Ms", label: "p95 (ms)" },
+              { key: "count", label: "Queries" },
+            ]}
+          />
+        </div>
+      </div>
     </Layout>
   );
 }

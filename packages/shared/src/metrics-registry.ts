@@ -9,7 +9,11 @@ export type MetricGroup =
   | "device"
   | "trends"
   | "behavioral"
-  | "reporting";
+  | "reporting"
+  | "protocol"
+  | "dhcp"
+  | "capacity"
+  | "infrastructure";
 
 export interface MetricDefinition {
   id: string;
@@ -148,6 +152,124 @@ export const METRICS: MetricDefinition[] = [
     description: "Three-tier raw / aggregate / intelligence data model. Nothing is ever discarded — see the v1 bible, Section 6." },
   { number: 50, id: "privacy_principles", group: "reporting", name: "Privacy Principles",
     description: "Local-only storage, no cloud telemetry, optional encrypted database, configurable retention, full data deletion on request, full export, anonymization tooling, and per-device privacy controls." },
+
+  // -------------------------------------------------------------------
+  // v2.12 — 100-metric expansion (#51-100)
+  // -------------------------------------------------------------------
+
+  { number: 51, id: "domain_response_code_distribution", group: "domain", name: "Domain Response Code Distribution",
+    description: "NOERROR/NXDOMAIN/SERVFAIL/REFUSED/timeout mix, per domain and network-wide." },
+  { number: 52, id: "domain_co_visit_recency", group: "domain", name: "Domain Co-Visit Recency",
+    description: "For domains already known to be paired (via #42), the time-lag between their two most recent visits — how in-sync a pair's usage still is right now." },
+  { number: 53, id: "domain_query_burstiness", group: "domain", name: "Domain Query Burstiness",
+    description: "How bursty vs. evenly-spaced a domain's queries are.",
+    formula: "Fano = variance(inter-query gaps) / mean(inter-query gaps)" },
+  { number: 54, id: "subdomain_fragmentation", group: "domain", name: "Subdomain Fragmentation",
+    description: "Count of distinct subdomains generated under a base domain — a proxy for CDN sharding or dynamic tracker subdomains." },
+  { number: 55, id: "domain_recency_decay_score", group: "domain", name: "Domain Recency Decay Score",
+    description: "An exponentially-weighted recency score for fading domains out of 'active' views without deleting their history.",
+    formula: "DecayScore = e^(-λ * days_since_last_seen)" },
+
+  { number: 56, id: "suspicious_tld_exposure", group: "security", name: "Suspicious TLD Exposure",
+    description: "Query share to TLDs statistically associated with abuse, tracked as a trend only — never used as a block signal on its own." },
+  { number: 57, id: "punycode_homograph_detection", group: "security", name: "Punycode / Homograph Domain Detection",
+    description: "Flags domains using punycode (xn--) or mixed-script characters, a common phishing/homograph-attack technique." },
+  { number: 58, id: "dns_tunneling_heuristics", group: "security", name: "DNS Tunneling Heuristics",
+    description: "Candidate signal combining high query rate, long query labels, and high character entropy for one domain — never a verdict on its own." },
+  { number: 59, id: "repeated_failure_burst_detection", group: "security", name: "Repeated Failure Burst Detection",
+    description: "Clusters of NXDOMAIN/SERVFAIL from the same client in a short window — can indicate malware C2 domain-generation attempts, or just a misconfigured device." },
+  { number: 60, id: "blocklist_hit_attribution", group: "security", name: "Blocklist Hit Attribution",
+    description: "Which category triggered each block, and per-category effectiveness over time. Attributed by netintel's own domain category, not by upstream blocklist name." },
+  { number: 61, id: "new_device_security_baseline", group: "security", name: "New Device Security Baseline",
+    description: "Snapshots a newly-seen device's first-24h query pattern as the initial baseline that #30's anomaly detection compares later activity against." },
+  { number: 62, id: "alert_to_incident_correlation", group: "security", name: "Alert-to-Incident Correlation",
+    description: "Links a fired alert policy back to the underlying security-analytics signals recorded near the same timestamp, for post-hoc review." },
+
+  { number: 63, id: "per_client_latency_breakdown", group: "performance", name: "Per-Client Latency Breakdown",
+    description: "Response-time distribution scoped per device rather than network-wide, to spot a single slow/misbehaving client." },
+  { number: 64, id: "recursive_vs_cached_ratio_over_time", group: "performance", name: "Recursive vs Cached Ratio Over Time",
+    description: "Daily trend of the recursive/cache split — an early signal for cache tuning or TTL misconfiguration." },
+  { number: 65, id: "query_retransmission_rate", group: "performance", name: "Query Retransmission Rate",
+    description: "Share of queries that look retried shortly after a prior query for the same client+domain — a proxy for resolver/network instability from query-log timing alone." },
+  { number: 66, id: "dnssec_validation_rate", group: "performance", name: "DNSSEC Validation Rate",
+    description: "Share of validated vs. unvalidated vs. bogus DNSSEC responses. Not currently exposed by the fields netintel reads from Technitium's query log — reported honestly as unavailable." },
+  { number: 67, id: "edns_protocol_feature_usage", group: "performance", name: "EDNS/Protocol Feature Usage",
+    description: "Real protocol distribution (UDP/TCP/DoT/DoH/DoQ) and TCP-fallback share. EDNS0 usage and truncated (TC-bit) response detection aren't exposed by the collector yet." },
+  { number: 68, id: "response_size_distribution", group: "performance", name: "Response Size Distribution",
+    description: "DNS response payload size distribution. Not currently exposed by the fields netintel reads from Technitium's query log — reported honestly as unavailable." },
+
+  { number: 69, id: "device_onboarding_timeline", group: "device", name: "Device Onboarding Timeline",
+    description: "A chronological view of a device's lifecycle: first-seen, first-classified-category, first-flagged-event, and current status." },
+  { number: 70, id: "device_idle_detection", group: "device", name: "Device Idle Detection",
+    description: "Identifies devices with DNS history but no meaningful recent activity — asleep or idle networked hardware rather than genuinely gone." },
+  { number: 71, id: "device_category_affinity_shift", group: "device", name: "Device Category Affinity Shift",
+    description: "Compares a device's dominant category mix this week against last week, to surface a device's usage character drifting over time." },
+  { number: 72, id: "mac_vendor_oui_classification", group: "device", name: "MAC Vendor / OUI Classification",
+    description: "Best-effort device-type hint from the DHCP-reported MAC vendor prefix, against a small offline table. A hint, never a guarantee — MACs can be randomized." },
+  { number: 73, id: "device_query_rate_percentile_rank", group: "device", name: "Device Query Rate Percentile Rank",
+    description: "Ranks each device against every other active device by query volume — spot the loudest clients on the network at a glance." },
+
+  { number: 74, id: "category_share_momentum", group: "trends", name: "Category Share Momentum",
+    description: "Week-over-week rate of change (not just level) of each category's share of total queries — surfaces categories rising or falling fastest." },
+  { number: 75, id: "seasonal_pattern_detection", group: "trends", name: "Seasonal Pattern Detection",
+    description: "Compares current daily query volume against the same weekday in prior weeks, to separate a genuine trend from routine weekly cycles." },
+  { number: 76, id: "domain_churn_rate", group: "trends", name: "Domain Churn Rate",
+    description: "Share of the network's active domain set that changed between periods.",
+    formula: "Churn = (dropped + added) / total_domains_either_period" },
+  { number: 77, id: "long_term_retention_curve", group: "trends", name: "Long-Term Retention Curve",
+    description: "Cohort-style: of domains first seen N days ago (1/7/14/30/60/90-day buckets), what share are still queried today." },
+
+  { number: 78, id: "multi_device_session_overlap", group: "behavioral", name: "Multi-Device Session Overlap",
+    description: "Detects concurrent active sessions across devices — household/office usage-overlap context, not identity-linking between devices." },
+  { number: 79, id: "domain_sequence_fingerprint", group: "behavioral", name: "Domain Sequence Fingerprint",
+    description: "Short recurring A -> B -> C in-session navigation sequences, treated as a fingerprint of routine behavior." },
+  { number: 80, id: "dwell_implied_engagement", group: "behavioral", name: "Dwell-Implied Engagement",
+    description: "A weak DNS-only proxy for engagement from repeat sub-resolution queries within a session — explicitly never real page dwell time, which DNS cannot observe." },
+  { number: 81, id: "automation_vs_human_pattern_classifier", group: "behavioral", name: "Automation vs. Human Pattern Classifier",
+    description: "Combines #41's periodicity and #8's session diversity into one heuristic score distinguishing likely-scripted/background traffic from human-driven browsing." },
+
+  { number: 82, id: "monthly_internet_report", group: "reporting", name: "Monthly Internet Report",
+    description: "The same shape as #47, month-scoped, with month-over-month deltas instead of week-over-week." },
+  { number: 83, id: "tool_usage_meta_metrics", group: "reporting", name: "Tool Usage Meta-Metrics",
+    description: "Usage counts for netintel's own features: saved Explorer queries, dashboards, and scheduled reports." },
+  { number: 84, id: "data_retention_storage_footprint", group: "reporting", name: "Data Retention & Storage Footprint",
+    description: "Real per-table row/byte size (via SQLite's dbstat), database file size, and the oldest retained record — live numbers behind #49's architecture." },
+
+  { number: 85, id: "query_type_distribution", group: "protocol", name: "Query Type Distribution",
+    description: "Breakdown of A/AAAA/CNAME/MX/TXT/NS/SOA/PTR/SRV/other record types queried, network-wide and per-domain." },
+  { number: 86, id: "ipv4_vs_ipv6_mix", group: "protocol", name: "IPv4 vs IPv6 Resolution Mix",
+    description: "A vs AAAA query share network-wide, plus per-client dual-stack vs. IPv4-only classification." },
+  { number: 87, id: "cname_chain_depth", group: "protocol", name: "CNAME Chain Depth",
+    description: "Average/max length of CNAME redirection chains, a proxy for CDN/tracker redirection complexity. Depends on the raw answer field, whose exact Technitium format is unconfirmed — needs live-instance verification." },
+  { number: 88, id: "reverse_dns_query_volume", group: "protocol", name: "Reverse DNS (PTR) Query Volume",
+    description: "PTR lookup activity, often generated by security tools/logging rather than normal browsing." },
+  { number: 89, id: "malformed_refused_query_rate", group: "protocol", name: "Malformed/Refused Query Rate",
+    description: "Share of queries Technitium logged as REFUSED, separate from NXDOMAIN — a misconfigured-device or probing signal. Genuinely unparseable queries that never reach the log aren't visible here." },
+  { number: 90, id: "doh_dot_doq_bypass_attempts", group: "protocol", name: "DoH/DoT/DoQ Bypass Attempts",
+    description: "Visible DNS-layer attempts to resolve known public DoH/DoT/DoQ provider hostnames — relevant to keeping resolution flowing through the local resolver. Only the lookup itself is visible; the encrypted traffic that would follow is not." },
+
+  { number: 91, id: "dhcp_lease_churn", group: "dhcp", name: "Lease Churn",
+    description: "New vs. expired vs. renewed DHCP leases per day — a proxy for device turnover (guests, IoT reconnects, reboots)." },
+  { number: 92, id: "dhcp_lease_duration_distribution", group: "dhcp", name: "Lease Duration Distribution",
+    description: "How long devices typically hold a lease before renewal, IP change, or expiry." },
+  { number: 93, id: "ip_reuse_identity_continuity", group: "dhcp", name: "IP Reuse & Identity Continuity",
+    description: "How often a 'new'-looking lease is actually a returning MAC vs. genuinely new hardware never seen before." },
+  { number: 94, id: "dhcp_to_dns_activity_gap", group: "dhcp", name: "DHCP-to-DNS Activity Gap",
+    description: "Time between a device receiving a lease and its first DNS query after that — flags devices that hold a lease but rarely/never resolve anything." },
+
+  { number: 95, id: "query_volume_forecast", group: "capacity", name: "Query Volume Forecast",
+    description: "7/30-day projected query volume with a real linear-regression trend line from daily capacity snapshots." },
+  { number: 96, id: "database_growth_forecast", group: "capacity", name: "Database Growth Forecast",
+    description: "Projected database size and estimated disk run-out date from historical growth rate." },
+  { number: 97, id: "device_count_forecast", group: "capacity", name: "Device Count Forecast",
+    description: "Projected active-device-count trend, useful for household/office capacity planning." },
+
+  { number: 98, id: "host_resource_utilization", group: "infrastructure", name: "Host Resource Utilization",
+    description: "netintel's own host CPU/memory/disk over time — the machine running netintel, not the network's devices — sampled every few minutes." },
+  { number: 99, id: "process_uptime_restart_history", group: "infrastructure", name: "Process Uptime & Restart History",
+    description: "netintel server's own uptime and restart count, distinguishing a clean shutdown from an inferred crash." },
+  { number: 100, id: "collector_health_timeline", group: "infrastructure", name: "Collector Health Timeline",
+    description: "Technitium reachability over time: uptime percentage, outage count, and outage duration — the persisted history behind the live collector/health.ts status." },
 ];
 
 export function getMetric(id: string): MetricDefinition | undefined {

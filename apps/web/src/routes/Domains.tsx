@@ -6,7 +6,12 @@ import { MetricCard } from "../components/MetricCard";
 import { MetricExplain } from "../components/MetricExplain";
 import { DonutChart } from "../components/charts/DonutChart";
 import { DistributionBar } from "../components/charts/DistributionBar";
-import { api, analytics } from "../lib/api";
+import { api, analytics, apiGet } from "../lib/api";
+
+interface FragmentedDomain {
+  registeredDomain: string;
+  distinctSubdomainCount: number;
+}
 
 export function DomainsPage() {
   const [search, setSearch] = useState("");
@@ -29,6 +34,11 @@ export function DomainsPage() {
     queryKey: ["tracking"],
     queryFn: analytics.tracking,
     refetchInterval: 10000,
+  });
+  const { data: fragmented } = useQuery({
+    queryKey: ["fragmentation-top"],
+    queryFn: () => apiGet<FragmentedDomain[]>("/domains/fragmentation/top"),
+    refetchInterval: 30000,
   });
 
   const filtered = (domains ?? []).filter((d) => d.domain.includes(search.toLowerCase()));
@@ -60,6 +70,11 @@ export function DomainsPage() {
       .slice(0, 10)
       .map((d) => ({ name: d.domain, value: Number((d.popularityScore ?? 0).toFixed(3)) }));
   }, [domains]);
+
+  const fragmentationBarData = useMemo(
+    () => (fragmented ?? []).slice(0, 10).map((f) => ({ name: f.registeredDomain, value: f.distinctSubdomainCount })),
+    [fragmented]
+  );
 
   return (
     <Layout title="Domains">
@@ -101,6 +116,16 @@ export function DomainsPage() {
           metricId="domain_popularity_score"
           data={popularityBarData}
           singleColor="#4f9dde"
+          height={260}
+        />
+      </div>
+
+      <div className="mb-6">
+        <DistributionBar
+          title="Most fragmented domains (distinct subdomains)"
+          metricId="subdomain_fragmentation"
+          data={fragmentationBarData}
+          singleColor="#9d6fd6"
           height={260}
         />
       </div>

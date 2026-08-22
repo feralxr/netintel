@@ -2,15 +2,48 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { Layout } from "../components/Layout";
 import { MetricCard } from "../components/MetricCard";
+import { MetricExplain } from "../components/MetricExplain";
+import { DataTable } from "../components/DataTable";
 import { TimeRangeControl, useTimeRange } from "../components/TimeRange";
 import { TrendChart } from "../components/charts/TrendChart";
 import { DonutChart } from "../components/charts/DonutChart";
-import { api } from "../lib/api";
+import { DistributionBar } from "../components/charts/DistributionBar";
+import { api, apiGet } from "../lib/api";
+
+interface ResponseCodeDist {
+  domain: string;
+  total: number;
+  breakdown: { responseCode: string; count: number; share: number }[];
+}
+interface Burstiness {
+  domain: string;
+  fanoFactor: number | null;
+  sampleSize: number;
+  note: string | null;
+}
+interface Fragmentation {
+  registeredDomain: string;
+  totalQueries: number;
+  distinctSubdomainCount: number;
+  subdomains: string[];
+}
 
 export function DomainDetailPage() {
   const { domain } = useParams({ from: "/domains/$domain" });
   const [range, setRange] = useTimeRange("7d");
   const { data } = useQuery({ queryKey: ["domain", domain], queryFn: () => api.domain(domain) });
+  const { data: responseCodes } = useQuery({
+    queryKey: ["domain-response-codes", domain],
+    queryFn: () => apiGet<ResponseCodeDist>(`/domains/${encodeURIComponent(domain)}/response-codes`),
+  });
+  const { data: burstiness } = useQuery({
+    queryKey: ["domain-burstiness", domain],
+    queryFn: () => apiGet<Burstiness>(`/domains/${encodeURIComponent(domain)}/burstiness`),
+  });
+  const { data: fragmentation } = useQuery({
+    queryKey: ["domain-fragmentation", domain],
+    queryFn: () => apiGet<Fragmentation>(`/domains/${encodeURIComponent(domain)}/fragmentation`),
+  });
 
   if (!data) {
     return (
@@ -79,7 +112,7 @@ export function DomainDetailPage() {
       </div>
 
       <h2 className="mb-3 text-sm font-semibold text-muted">Daily history</h2>
-      <div className="overflow-hidden rounded border border-border">
+      <div className="mb-6 overflow-hidden rounded border border-border">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface text-xs uppercase tracking-wide text-faint">
             <tr>
@@ -110,6 +143,44 @@ export function DomainDetailPage() {
           </tbody>
         </table>
       </div>
+
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
+        <DistributionBar
+          title="Response code distribution"
+          metricId="domain_response_code_distribution"
+          data={(responseCodes?.breakdown ?? []).map((b) => ({ name: b.responseCode, value: b.count }))}
+          height={220}
+        />
+        <div>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+            Query burstiness <MetricExplain metricId="domain_query_burstiness" />
+          </h2>
+          <div className="rounded border border-border bg-surface p-4 text-sm">
+            {burstiness?.fanoFactor !== null && burstiness?.fanoFactor !== undefined ? (
+              <>
+                <div className="text-lg text-text">{burstiness.fanoFactor.toFixed(2)}</div>
+                <p className="mt-1 text-xs text-faint">
+                  Fano factor from {burstiness.sampleSize} queries. ~1 = random spacing, {">"}1 = bursty, {"<"}1 = unusually regular.
+                </p>
+              </>
+            ) : (
+              <p className="text-faint">{burstiness?.note ?? "Loading…"}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted">
+        Subdomain fragmentation <MetricExplain metricId="subdomain_fragmentation" />
+      </h2>
+      <p className="mb-3 text-xs text-faint">
+        {fragmentation ? `${fragmentation.distinctSubdomainCount} distinct subdomains observed under this registered domain.` : "Loading…"}
+      </p>
+      <DataTable
+        rows={(fragmentation?.subdomains ?? []).slice(0, 30).map((s) => ({ subdomain: s }))}
+        columns={[{ key: "subdomain", label: "Subdomain" }]}
+        emptyMessage="No subdomain fragmentation data yet."
+      />
     </Layout>
   );
 }

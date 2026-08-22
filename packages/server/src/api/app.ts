@@ -19,6 +19,8 @@ import { capacityRoute } from "./routes/capacity.js";
 import { searchRoute } from "./routes/search.js";
 import { infrastructureRoute } from "./routes/infrastructure.js";
 import { reportsRoute } from "./routes/reports.js";
+import { protocolRoute } from "./routes/protocol.js";
+import { dhcpRoute } from "./routes/dhcp.js";
 
 export const app = new Hono();
 
@@ -45,3 +47,5 @@ app.route("/api/capacity", capacityRoute);
 app.route("/api/search", searchRoute);
 app.route("/api/infrastructure", infrastructureRoute);
 app.route("/api/reports", reportsRoute);
+app.route("/api/protocol", protocolRoute);
+app.route("/api/dhcp", dhcpRoute);

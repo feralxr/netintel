@@ -36,6 +36,13 @@
       "when": 1787000000000,
       "tag": "0004_v2_11_scheduled_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1787100000000,
+      "tag": "0005_v2_12_metrics_100",
+      "breakpoints": true
     }
   ]
 }

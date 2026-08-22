@@ -3,15 +3,19 @@ import { Link, useRouterState } from "@tanstack/react-router";
 const NAV_ITEMS = [
   { to: "/", label: "Overview", icon: "◆" },
   { to: "/network", label: "Network", icon: "▤" },
+  { to: "/devices", label: "Devices", icon: "▥" },
   { to: "/domains", label: "Domains", icon: "◈" },
   { to: "/security", label: "Security", icon: "◉" },
   { to: "/performance", label: "Performance", icon: "▲" },
+  { to: "/protocol", label: "Protocol", icon: "◇" },
   { to: "/history", label: "History", icon: "▦" },
   { to: "/map", label: "Relationship Map", icon: "◎" },
   { to: "/explorer", label: "Explorer", icon: "⌕" },
   { to: "/dashboards", label: "Dashboards", icon: "▧" },
+  { to: "/reports", label: "Reports", icon: "▨" },
   { to: "/alerts", label: "Alerts", icon: "⚠" },
   { to: "/synthetics", label: "Synthetics", icon: "◍" },
+  { to: "/system", label: "System", icon: "⚙" },
 ];
 
 export function Sidebar() {
