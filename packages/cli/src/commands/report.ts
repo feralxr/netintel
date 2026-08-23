@@ -1,6 +1,9 @@
 import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
+import { renderTimeSeries } from "../charts/timeseries.js";
+import { renderBarChart } from "../charts/bar.js";
+import { resolveChartStyle } from "../config.js";
 
 interface WeeklyReport {
   period: { from: string; to: string };
@@ -46,6 +49,12 @@ interface StorageFootprint {
   perTable: { table: string; bytes: number }[];
   note: string;
 }
+interface SeasonalDay {
+  date: string;
+  dayOfWeek: string;
+  actual: number;
+  historicalAvgForWeekday: number;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
@@ -54,7 +63,7 @@ function formatBytes(bytes: number): string {
 }
 
 export async function reportCommand(): Promise<void> {
-  const [weekly, monthly, fingerprint, momentum, churn, retention, toolUsage, storage] = await Promise.all([
+  const [weekly, monthly, fingerprint, momentum, churn, retention, toolUsage, storage, seasonal] = await Promise.all([
     apiGet<WeeklyReport>("/api/analytics/weekly-report"), // #47
     apiGet<MonthlyReport>("/api/analytics/monthly-report"), // #82
     apiGet<Fingerprint>("/api/analytics/fingerprint"), // #48
@@ -63,6 +72,7 @@ export async function reportCommand(): Promise<void> {
     apiGet<RetentionBucket[]>("/api/analytics/retention"), // #77
     apiGet<ToolUsage>("/api/analytics/tool-usage"), // #83
     apiGet<StorageFootprint>("/api/analytics/storage-footprint"), // #84
+    apiGet<SeasonalDay[]>("/api/analytics/seasonal"), // #75
   ]);
 
   console.log(chalk.bold(`\nWeekly report (${weekly.period.from} → ${weekly.period.to})\n`));
@@ -80,25 +90,34 @@ export async function reportCommand(): Promise<void> {
   );
 
   section("Category share momentum (week over week)");
-  table(
-    momentum.slice(0, 10).map((m) => ({ category: m.category, momentum: `${m.momentumPercentagePoints >= 0 ? "+" : ""}${m.momentumPercentagePoints.toFixed(1)}pp` })),
-    [
-      { key: "category", label: "Category" },
-      { key: "momentum", label: "Momentum" },
-    ]
+  console.log(
+    renderBarChart(
+      momentum.slice(0, 10).map((m) => ({ label: m.category, value: Number(m.momentumPercentagePoints.toFixed(1)) })),
+      { color: chalk.magenta, valueFormatter: (v) => `${v >= 0 ? "+" : ""}${v}pp` }
+    )
+  );
+
+  section("Seasonal pattern (actual vs historical average by day)");
+  console.log(
+    renderTimeSeries(
+      [
+        { label: "actual", values: seasonal.map((d) => d.actual) },
+        { label: "historical avg", values: seasonal.map((d) => d.historicalAvgForWeekday) },
+      ],
+      resolveChartStyle(),
+      { height: 8 }
+    )
   );
 
   section("Domain churn & retention");
   stat("Added", churn.added, 16);
   stat("Dropped", churn.dropped, 16);
   stat("Churn rate", `${(churn.churnRate * 100).toFixed(1)}%`, 16);
-  table(
-    retention.map((r) => ({ cohort: `${r.days}d`, cohortSize: r.cohortSize, stillActive: r.stillActiveShare !== null ? `${(r.stillActiveShare * 100).toFixed(0)}%` : "no cohort" })),
-    [
-      { key: "cohort", label: "Cohort age" },
-      { key: "cohortSize", label: "Cohort size" },
-      { key: "stillActive", label: "Still active" },
-    ]
+  console.log(
+    renderBarChart(
+      retention.filter((r) => r.stillActiveShare !== null).map((r) => ({ label: `${r.days}d cohort`, value: Number(((r.stillActiveShare ?? 0) * 100).toFixed(0)) })),
+      { color: chalk.green, valueFormatter: (v) => `${v}%` }
+    )
   );
 
   section("Tool usage");

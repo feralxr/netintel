@@ -2,6 +2,9 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import { apiGet } from "../api-client.js";
 import { section, table, noDataNote } from "../output.js";
+import { renderTimeSeries } from "../charts/timeseries.js";
+import { renderBarChart } from "../charts/bar.js";
+import { resolveChartStyle } from "../config.js";
 
 interface DomainResponse {
   record: { domain: string; firstSeen: string; lastSeen: string; queryCount: number; uniqueDays: number; lifecycleState: string | null };
@@ -49,6 +52,14 @@ export async function domainCommand(domain: string): Promise<void> {
       table.push([d.date, d.queries, d.cacheHits, d.blocked, d.nxdomain]);
     }
     console.log(table.toString());
+
+    if (dailyHistory.length > 2) {
+      const chronological = [...dailyHistory.slice(0, 30)].reverse(); // API returns newest-first; charts read left-to-right
+      console.log();
+      console.log(
+        renderTimeSeries([{ label: "queries/day", values: chronological.map((d) => d.queries) }], resolveChartStyle(), { height: 8 })
+      );
+    }
   }
 
   if (recentQueries.length > 0) {
@@ -67,11 +78,7 @@ export async function domainCommand(domain: string): Promise<void> {
   }
 
   section("Response code distribution");
-  table(responseCodes.breakdown, [
-    { key: "responseCode", label: "Code" },
-    { key: "count", label: "Count" },
-    { key: "share", label: "Share", format: (v) => `${((v as number) * 100).toFixed(1)}%` },
-  ]);
+  console.log(renderBarChart(responseCodes.breakdown.map((b) => ({ label: b.responseCode, value: b.count })), { color: chalk.blue }));
 
   section("Query burstiness");
   if (burstiness.fanoFactor !== null) {

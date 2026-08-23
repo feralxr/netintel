@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
+import { renderBarChart } from "../charts/bar.js";
 
 interface QueryTypeDist {
   totalQueries: number;
@@ -52,11 +53,7 @@ export async function protocolCommand(): Promise<void> {
   stat("DoH/DoT/DoQ bypass attempts", doh.totalAttempts, 30);
 
   section("Query type distribution");
-  table(queryTypes.breakdown, [
-    { key: "queryType", label: "Type" },
-    { key: "count", label: "Count" },
-    { key: "share", label: "Share", format: (v) => `${((v as number) * 100).toFixed(1)}%` },
-  ]);
+  console.log(renderBarChart(queryTypes.breakdown.map((b) => ({ label: b.queryType, value: b.count })), { color: chalk.blue }));
 
   section("CNAME chain depth");
   if (cname.hasData) {

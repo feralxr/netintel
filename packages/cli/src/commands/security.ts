@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
+import { renderBarChart } from "../charts/bar.js";
 
 interface NxdomainAnalysis {
   totalQueries: number;
@@ -65,10 +66,7 @@ export async function securityCommand(): Promise<void> {
   stat("Blocked (attributed)", blocklist.totalBlocked);
 
   section("Top NXDOMAIN sources");
-  table(nxdomain.topNxDomains.slice(0, 10), [
-    { key: "domain", label: "Domain" },
-    { key: "count", label: "Count" },
-  ]);
+  console.log(renderBarChart(nxdomain.topNxDomains.slice(0, 10).map((d) => ({ label: d.domain, value: d.count })), { color: chalk.red }));
 
   section("High-entropy domains (candidate signal, not proof)");
   table(entropy.slice(0, 10), [
@@ -92,16 +90,10 @@ export async function securityCommand(): Promise<void> {
   }
 
   section("Suspicious TLD exposure (trend only)");
-  table(suspiciousTlds.breakdown.slice(0, 10), [
-    { key: "tld", label: "TLD" },
-    { key: "count", label: "Count" },
-  ]);
+  console.log(renderBarChart(suspiciousTlds.breakdown.slice(0, 10).map((b) => ({ label: `.${b.tld}`, value: b.count })), { color: chalk.yellow }));
 
   section("Blocklist hit attribution");
-  table(blocklist.byCategory.slice(0, 10), [
-    { key: "category", label: "Category" },
-    { key: "count", label: "Count" },
-  ]);
+  console.log(renderBarChart(blocklist.byCategory.slice(0, 10).map((b) => ({ label: b.category, value: b.count })), { color: chalk.red }));
 
   section("DNS tunneling heuristics (candidate signal, not a verdict)");
   table(

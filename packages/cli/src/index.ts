@@ -16,13 +16,16 @@ import { dhcpCommand } from "./commands/dhcp.js";
 import { systemCommand } from "./commands/system.js";
 import { reportCommand } from "./commands/report.js";
 import { behavioralCommand } from "./commands/behavioral.js";
+import { configCommand } from "./commands/config.js";
+import { CHART_STYLES } from "./config.js";
 
 const program = new Command();
 
 program
   .name("netintel")
   .description("Personal Network Intelligence CLI — self-hosted DNS observability, built on Technitium DNS Server.")
-  .version("1.1.0");
+  .version("1.2.0")
+  .option("--chart <style>", `chart style for time-series charts: ${CHART_STYLES.join("|")} (overrides the persisted default for this run only)`);
 
 program.command("status").description("Engine health, live device count, uptime").action(statusCommand);
 
@@ -46,6 +49,11 @@ program.command("system").description("Capacity forecasts and infrastructure hea
 program.command("report").description("Weekly/monthly reports, category momentum, domain churn/retention, storage footprint").action(reportCommand);
 
 program.command("behavioral").description("Routine detection, periodicity, session overlap, recurring domain sequences").action(behavioralCommand);
+
+program
+  .command("config [key] [value]")
+  .description("View or set CLI config (currently: chart-style)")
+  .action(configCommand);
 
 program
   .command("explain [metricOrGroup]")

@@ -1,6 +1,9 @@
 import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat } from "../output.js";
+import { renderTimeSeries } from "../charts/timeseries.js";
+import { renderBarChart } from "../charts/bar.js";
+import { resolveChartStyle } from "../config.js";
 
 interface SearchVsDirect {
   search: { queries: number; share: number };
@@ -34,15 +37,21 @@ interface SequenceFingerprint {
   sequence: string;
   occurrences: number;
 }
+interface TimeOfDay {
+  hourCounts: number[];
+  peakHour: number;
+  quietHour: number;
+}
 
 export async function behavioralCommand(): Promise<void> {
-  const [searchVsDirect, periodic, backgroundVsInteractive, routine, sessionOverlap, sequences] = await Promise.all([
+  const [searchVsDirect, periodic, backgroundVsInteractive, routine, sessionOverlap, sequences, timeOfDay] = await Promise.all([
     apiGet<SearchVsDirect>("/api/behavioral/search-vs-direct"), // #39
     apiGet<PeriodicDomain[]>("/api/behavioral/periodicity"), // #41
     apiGet<BackgroundVsInteractive>("/api/behavioral/background-vs-interactive"), // #40
     apiGet<InternetRoutine>("/api/behavioral/routine"), // #46
     apiGet<SessionOverlap>("/api/behavioral/session-overlap"), // #78
     apiGet<SequenceFingerprint[]>("/api/behavioral/sequence-fingerprints"), // #79
+    apiGet<TimeOfDay>("/api/analytics/time-of-day"), // #6 (hourly distribution feeding #46's routine detection)
   ]);
 
   console.log(chalk.bold("\nBehavioral overview\n"));
@@ -66,12 +75,18 @@ export async function behavioralCommand(): Promise<void> {
     ]
   );
 
+  section("Hourly activity (UTC)");
+  console.log(
+    renderTimeSeries([{ label: "queries/hr", values: timeOfDay.hourCounts }], resolveChartStyle(), { height: 8 })
+  );
+
   section("Most periodic domains (candidate background/telemetry traffic)");
-  table(periodic.slice(0, 10), [
-    { key: "domain", label: "Domain" },
-    { key: "periodicityScore", label: "Periodicity" },
-    { key: "sampleSize", label: "Samples" },
-  ]);
+  console.log(
+    renderBarChart(
+      periodic.slice(0, 10).map((p) => ({ label: p.domain, value: Number(p.periodicityScore.toFixed(2)) })),
+      { color: chalk.magenta }
+    )
+  );
 
   section("Recurring domain sequences");
   table(sequences.slice(0, 10), [

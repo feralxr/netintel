@@ -1,6 +1,8 @@
 import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
+import { renderTimeSeries } from "../charts/timeseries.js";
+import { resolveChartStyle } from "../config.js";
 
 interface LeaseChurnDay {
   date: string;
@@ -41,7 +43,20 @@ export async function dhcpCommand(): Promise<void> {
   stat("Avg lease duration", duration.hasData && duration.avgHours !== undefined ? `${duration.avgHours.toFixed(1)}h` : "no data yet");
 
   section("Lease churn by day");
-  table(churn.slice(-14), [
+  const churnRecent = churn.slice(-14);
+  console.log(
+    renderTimeSeries(
+      [
+        { label: "new", values: churnRecent.map((d) => d.new) },
+        { label: "renewed", values: churnRecent.map((d) => d.renewed) },
+        { label: "expired", values: churnRecent.map((d) => d.expired) },
+      ],
+      resolveChartStyle(),
+      { height: 8 }
+    )
+  );
+  console.log();
+  table(churnRecent, [
     { key: "date", label: "Date" },
     { key: "new", label: "New" },
     { key: "renewed", label: "Renewed" },

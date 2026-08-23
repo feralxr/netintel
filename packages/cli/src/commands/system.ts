@@ -1,6 +1,8 @@
 import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
+import { renderTimeSeries } from "../charts/timeseries.js";
+import { resolveChartStyle } from "../config.js";
 
 interface Forecast {
   hasData: boolean;
@@ -17,6 +19,7 @@ interface HostUtilization {
   cpuLoadAvg1m: { mean: number; p95: number } | null;
   memoryUsedPercent: { mean: number; p95: number } | null;
   note: string | null;
+  timeline: { timestamp: string; cpuLoadAvg1m: number | null; memoryUsedPercent: number }[];
 }
 interface RestartEntry {
   startedAt: string;
@@ -60,6 +63,21 @@ export async function systemCommand(): Promise<void> {
   if (hostUtil.memoryUsedPercent) stat("Host memory used (mean)", `${hostUtil.memoryUsedPercent.mean.toFixed(1)}%`, 30);
   if (hostUtil.cpuLoadAvg1m) stat("Host CPU load (mean)", hostUtil.cpuLoadAvg1m.mean.toFixed(2), 30);
   noDataNote(hostUtil.note);
+
+  if (hostUtil.timeline.length > 0) {
+    section("Host resource utilization (CPU load / memory used %)");
+    const recent = hostUtil.timeline.slice(-40);
+    console.log(
+      renderTimeSeries(
+        [
+          { label: "memory %", values: recent.map((t) => t.memoryUsedPercent) },
+          ...(recent.some((t) => t.cpuLoadAvg1m !== null) ? [{ label: "cpu load", values: recent.map((t) => t.cpuLoadAvg1m ?? 0) }] : []),
+        ],
+        resolveChartStyle(),
+        { height: 8 }
+      )
+    );
+  }
 
   if (diskRunout.hasData && diskRunout.daysUntilFull !== null) {
     stat("Estimated disk runout", `${diskRunout.daysUntilFull.toFixed(0)} days`);

@@ -1,6 +1,9 @@
 import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
+import { renderTimeSeries } from "../charts/timeseries.js";
+import { renderBarChart } from "../charts/bar.js";
+import { resolveChartStyle } from "../config.js";
 
 interface Distribution {
   mean: number;
@@ -61,9 +64,14 @@ interface ResponseSizeResponse {
   hasData: boolean;
   note: string | null;
 }
+interface RecursiveCachedDay {
+  date: string;
+  cached: number;
+  recursive: number;
+}
 
 export async function performanceCommand(): Promise<void> {
-  const [dnsPerf, cache, prefetch, upstream, reliability, clientLatency, retransmission, dnssec, protocolFeatures, responseSize] = await Promise.all([
+  const [dnsPerf, cache, prefetch, upstream, reliability, clientLatency, retransmission, dnssec, protocolFeatures, responseSize, recursiveCachedTrend] = await Promise.all([
     apiGet<DnsPerformance>("/api/performance/dns"), // #18
     apiGet<CachePerformance>("/api/performance/cache"), // #19
     apiGet<PrefetchEntry[]>("/api/performance/prefetch?limit=10"), // #22
@@ -74,6 +82,7 @@ export async function performanceCommand(): Promise<void> {
     apiGet<DnssecResponse>("/api/performance/dnssec"), // #66
     apiGet<ProtocolFeatures>("/api/performance/protocol-features"), // #67
     apiGet<ResponseSizeResponse>("/api/performance/response-size"), // #68
+    apiGet<RecursiveCachedDay[]>("/api/performance/recursive-cached-trend"), // #64
   ]);
 
   console.log(chalk.bold("\nPerformance overview\n"));
@@ -86,12 +95,26 @@ export async function performanceCommand(): Promise<void> {
   if (!dnsPerf.hasData) noDataNote(dnsPerf.note);
 
   section("Protocol distribution");
-  table(protocolFeatures.protocolBreakdown, [
-    { key: "protocol", label: "Protocol" },
-    { key: "count", label: "Count" },
-    { key: "share", label: "Share", format: (v) => `${((v as number) * 100).toFixed(1)}%` },
-  ]);
+  console.log(
+    renderBarChart(
+      protocolFeatures.protocolBreakdown.map((p) => ({ label: p.protocol, value: p.count })),
+      { color: chalk.green }
+    )
+  );
   noDataNote(protocolFeatures.edns0Usage.note);
+
+  section("Recursive vs cached ratio over time");
+  const trendRecent = recursiveCachedTrend.slice(-14);
+  console.log(
+    renderTimeSeries(
+      [
+        { label: "cached", values: trendRecent.map((d) => d.cached) },
+        { label: "recursive", values: trendRecent.map((d) => d.recursive) },
+      ],
+      resolveChartStyle(),
+      { height: 8 }
+    )
+  );
 
   section("Per-client latency");
   table(
