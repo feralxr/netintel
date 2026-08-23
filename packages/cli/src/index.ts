@@ -24,7 +24,7 @@ const program = new Command();
 program
   .name("netintel")
   .description("Personal Network Intelligence CLI — self-hosted DNS observability, built on Technitium DNS Server.")
-  .version("1.2.0")
+  .version("1.3.0")
   .option("--chart <style>", `chart style for time-series charts: ${CHART_STYLES.join("|")} (overrides the persisted default for this run only)`);
 
 program.command("status").description("Engine health, live device count, uptime").action(statusCommand);

@@ -4,8 +4,12 @@ import { eq, desc } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { alertPolicies, alertEvents } from "../../db/schema.js";
 import { evaluatePolicy, type AlertPolicyDefinition } from "../../alerting/policy-engine.js";
+import { ALERTABLE_METRICS } from "../../alerting/metric-snapshots.js";
 
 export const alertsRoute = new Hono();
+
+/** Catalog of the curated new-metric snapshot conditions, for the alert builder UI's dropdown. Mirrors /api/explorer/schema's role for Explorer-based conditions. */
+alertsRoute.get("/snapshot-metrics", (c) => c.json(ALERTABLE_METRICS.map(({ id, label, group, unit }) => ({ id, label, group, unit }))));
 
 alertsRoute.get("/policies", (c) => c.json(db.select().from(alertPolicies).all()));
 

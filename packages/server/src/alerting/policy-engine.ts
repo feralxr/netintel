@@ -5,15 +5,40 @@ import { runQuery, type QueryDefinition } from "../explorer/query-engine.js";
 import { emitNotification } from "../notifications/engine.js";
 import { executeAction, type ActionDefinition } from "./actions.js";
 import { dispatchToChannels } from "./dispatch.js";
+import { ALERTABLE_METRICS_BY_ID } from "./metric-snapshots.js";
 import { randomUUID } from "node:crypto";
 
 export type ComparisonOperator = "gt" | "lt" | "gte" | "lte" | "eq" | "ne";
 
-export interface AlertCondition {
-  query: Omit<QueryDefinition, "timeRange">; // timeRange is computed from windowMinutes at evaluation time
-  windowMinutes: number;
-  comparison: { operator: ComparisonOperator; threshold: number };
+interface Comparison {
+  operator: ComparisonOperator;
+  threshold: number;
 }
+
+/**
+ * "explorer" conditions (the original and default) query dns_events via the
+ * Explorer's generic metric vocabulary over a rolling time window.
+ * "metric_snapshot" conditions (v2.13) read one of a curated set of
+ * point-in-time metrics from tables/computed values the Explorer can't
+ * reach — DHCP lease events, host health samples, capacity forecasts,
+ * security candidate-signal counts (see metric-snapshots.ts). `source` is
+ * optional and defaults to "explorer" so existing stored policies (created
+ * before this type existed, with no `source` field at all) keep working
+ * unchanged.
+ */
+export type AlertCondition =
+  | {
+      source?: "explorer";
+      query: Omit<QueryDefinition, "timeRange">; // timeRange is computed from windowMinutes at evaluation time
+      windowMinutes: number;
+      comparison: Comparison;
+    }
+  | {
+      source: "metric_snapshot";
+      metricId: string;
+      windowMinutes?: number; // used only for the trigger cooldown, not for the read itself (which is always "right now")
+      comparison: Comparison;
+    };
 
 export interface AlertPolicyDefinition {
   logic: "AND" | "OR";
@@ -47,7 +72,7 @@ function opSymbol(op: ComparisonOperator): string {
   return { gt: ">", lt: "<", gte: ">=", lte: "<=", eq: "==", ne: "!=" }[op];
 }
 
-export function evaluateCondition(condition: AlertCondition): ConditionResult {
+function evaluateExplorerCondition(condition: Extract<AlertCondition, { source?: "explorer" }>): ConditionResult {
   const to = new Date();
   const from = new Date(to.getTime() - condition.windowMinutes * 60_000);
 
@@ -67,6 +92,31 @@ export function evaluateCondition(condition: AlertCondition): ConditionResult {
     }
   }
   return { breached: false, value: null, explanation: "no breach" };
+}
+
+function evaluateMetricSnapshotCondition(condition: Extract<AlertCondition, { source: "metric_snapshot" }>): ConditionResult {
+  const metric = ALERTABLE_METRICS_BY_ID.get(condition.metricId);
+  if (!metric) {
+    return { breached: false, value: null, explanation: `unknown metric_snapshot id "${condition.metricId}"` };
+  }
+
+  const value = metric.compute();
+  if (value === null) {
+    return { breached: false, value: null, explanation: `${metric.label} is not currently available` };
+  }
+
+  if (compare(value, condition.comparison.operator, condition.comparison.threshold)) {
+    return {
+      breached: true,
+      value,
+      explanation: `${metric.label} = ${value.toFixed(2)}${metric.unit} ${opSymbol(condition.comparison.operator)} ${condition.comparison.threshold}${metric.unit}`,
+    };
+  }
+  return { breached: false, value: null, explanation: "no breach" };
+}
+
+export function evaluateCondition(condition: AlertCondition): ConditionResult {
+  return condition.source === "metric_snapshot" ? evaluateMetricSnapshotCondition(condition) : evaluateExplorerCondition(condition);
 }
 
 export function evaluatePolicy(definition: AlertPolicyDefinition): { triggered: boolean; explanation: string; value: number | null } {
@@ -94,7 +144,7 @@ export async function runAllAlertPolicies(): Promise<void> {
       continue; // malformed policy definition, skip rather than crash the whole scheduler
     }
 
-    const shortestWindowMinutes = Math.min(...definition.conditions.map((c) => c.windowMinutes), 60);
+    const shortestWindowMinutes = Math.min(...definition.conditions.map((c) => c.windowMinutes ?? 15), 60);
     if (policy.lastTriggeredAt) {
       const cooldownMs = shortestWindowMinutes * 60_000;
       if (now.getTime() - new Date(policy.lastTriggeredAt).getTime() < cooldownMs) {

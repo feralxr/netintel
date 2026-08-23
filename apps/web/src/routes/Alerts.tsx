@@ -21,7 +21,14 @@ interface AlertEvent {
   acknowledged: boolean;
 }
 
-const METRICS = ["count", "uniqueDomains", "uniqueClients", "avgResponseTime", "blockedCount", "nxdomainCount"];
+interface SnapshotMetric {
+  id: string;
+  label: string;
+  group: string;
+  unit: string;
+}
+
+const EXPLORER_METRICS = ["count", "uniqueDomains", "uniqueClients", "avgResponseTime", "blockedCount", "nxdomainCount"];
 const OPERATORS = ["gt", "lt", "gte", "lte", "eq", "ne"];
 
 async function fetchPolicies(): Promise<AlertPolicy[]> {
@@ -36,13 +43,22 @@ async function fetchEvents(): Promise<AlertEvent[]> {
   return res.json();
 }
 
+async function fetchSnapshotMetrics(): Promise<SnapshotMetric[]> {
+  const res = await fetch("/api/alerts/snapshot-metrics");
+  if (!res.ok) throw new Error("failed to load snapshot metrics");
+  return res.json();
+}
+
 export function AlertsPage() {
   const queryClient = useQueryClient();
   const { data: policies } = useQuery({ queryKey: ["alert-policies"], queryFn: fetchPolicies, refetchInterval: 15000 });
   const { data: events } = useQuery({ queryKey: ["alert-events"], queryFn: fetchEvents, refetchInterval: 15000 });
+  const { data: snapshotMetrics } = useQuery({ queryKey: ["alert-snapshot-metrics"], queryFn: fetchSnapshotMetrics });
 
   const [name, setName] = useState("");
-  const [metric, setMetric] = useState(METRICS[0]);
+  const [source, setSource] = useState<"explorer" | "metric_snapshot">("explorer");
+  const [metric, setMetric] = useState(EXPLORER_METRICS[0]);
+  const [snapshotMetricId, setSnapshotMetricId] = useState("");
   const [operator, setOperator] = useState(OPERATORS[0]);
   const [threshold, setThreshold] = useState("0");
   const [windowMinutes, setWindowMinutes] = useState("60");
@@ -50,11 +66,28 @@ export function AlertsPage() {
   const [webhookUrl, setWebhookUrl] = useState("");
   const [emailTo, setEmailTo] = useState("");
 
+  const activeSnapshotMetric = snapshotMetrics?.find((m) => m.id === snapshotMetricId);
+
   const createPolicy = useMutation({
     mutationFn: async () => {
       const channels = ["in_app"];
       if (webhookUrl) channels.push(`webhook:${webhookUrl}`);
       if (emailTo) channels.push(`email:${emailTo}`);
+
+      const condition =
+        source === "explorer"
+          ? {
+              source: "explorer",
+              query: { metric },
+              windowMinutes: Number(windowMinutes),
+              comparison: { operator, threshold: Number(threshold) },
+            }
+          : {
+              source: "metric_snapshot",
+              metricId: snapshotMetricId,
+              windowMinutes: Number(windowMinutes), // cooldown only — the read itself is always "right now"
+              comparison: { operator, threshold: Number(threshold) },
+            };
 
       const res = await fetch("/api/alerts/policies", {
         method: "POST",
@@ -63,16 +96,7 @@ export function AlertsPage() {
           name,
           severity,
           channels,
-          definition: {
-            logic: "AND",
-            conditions: [
-              {
-                query: { metric },
-                windowMinutes: Number(windowMinutes),
-                comparison: { operator, threshold: Number(threshold) },
-              },
-            ],
-          },
+          definition: { logic: "AND", conditions: [condition] },
         }),
       });
       if (!res.ok) throw new Error("failed to create policy");
@@ -124,15 +148,44 @@ export function AlertsPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">Metric</label>
-            <select value={metric} onChange={(e) => setMetric(e.target.value)} className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-text outline-none">
-              {METRICS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
+            <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">Metric source</label>
+            <select
+              value={source}
+              onChange={(e) => setSource(e.target.value as "explorer" | "metric_snapshot")}
+              className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-text outline-none"
+            >
+              <option value="explorer">DNS traffic (Explorer)</option>
+              <option value="metric_snapshot">System / security metric</option>
             </select>
           </div>
+          {source === "explorer" ? (
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">Metric</label>
+              <select value={metric} onChange={(e) => setMetric(e.target.value)} className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-text outline-none">
+                {EXPLORER_METRICS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">Metric</label>
+              <select
+                value={snapshotMetricId}
+                onChange={(e) => setSnapshotMetricId(e.target.value)}
+                className="w-64 rounded border border-border bg-bg px-2 py-1.5 text-sm text-text outline-none"
+              >
+                <option value="">Select a metric…</option>
+                {(snapshotMetrics ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    [{m.group}] {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">Operator</label>
             <select value={operator} onChange={(e) => setOperator(e.target.value)} className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-text outline-none">
@@ -144,7 +197,9 @@ export function AlertsPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">Threshold</label>
+            <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">
+              Threshold{activeSnapshotMetric?.unit ? ` (${activeSnapshotMetric.unit})` : ""}
+            </label>
             <input
               type="number"
               value={threshold}
@@ -153,7 +208,9 @@ export function AlertsPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">Window (min)</label>
+            <label className="mb-1 block text-[10px] uppercase tracking-wide text-faint">
+              {source === "explorer" ? "Window (min)" : "Cooldown (min)"}
+            </label>
             <input
               type="number"
               value={windowMinutes}
@@ -191,7 +248,7 @@ export function AlertsPage() {
           </div>
           <button
             onClick={() => createPolicy.mutate()}
-            disabled={!name || createPolicy.isPending}
+            disabled={!name || createPolicy.isPending || (source === "metric_snapshot" && !snapshotMetricId)}
             className="rounded bg-accent px-4 py-1.5 text-sm font-medium text-bg disabled:opacity-50"
           >
             Create policy
