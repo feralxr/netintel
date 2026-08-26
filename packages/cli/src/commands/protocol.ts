@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
 import { renderBarChart } from "../charts/bar.js";
+import { isJsonMode } from "../config.js";
 
 interface QueryTypeDist {
   totalQueries: number;
@@ -44,6 +45,11 @@ export async function protocolCommand(): Promise<void> {
     apiGet<MalformedRefused>("/api/protocol/malformed-refused"),
     apiGet<DohBypass>("/api/protocol/doh-bypass"),
   ]);
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify({ queryTypes, ipMix, cname, ptr, malformed, doh }, null, 2));
+    return;
+  }
 
   console.log(chalk.bold("\nProtocol overview\n"));
   stat("IPv4 share", `${(ipMix.ipv4Share * 100).toFixed(1)}%`);

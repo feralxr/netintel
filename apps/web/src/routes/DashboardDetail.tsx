@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { Layout } from "../components/Layout";
+import GridLayout, { WidthProvider, type Layout } from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
+import { Layout as PageLayout } from "../components/Layout";
 import { CHART_GRID_COLOR, CHART_AXIS_COLOR, CHART_TOOLTIP_BG, CHART_TOOLTIP_BORDER } from "../components/charts/palette";
+
+const ResponsiveGridLayout = WidthProvider(GridLayout);
+const GRID_COLS = 12;
+const ROW_HEIGHT = 60; // px per grid unit — matches the existing default panel h=3 (~180px) reasonably
 
 interface SavedQuery {
   id: string;
@@ -16,6 +23,10 @@ interface RenderedPanel {
   title: string;
   chartType: string;
   queryName: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
   error: string | null;
   result: { rows: Record<string, string | number | boolean | null>[] } | null;
 }
@@ -67,8 +78,38 @@ export function DashboardDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboard-render", id] }),
   });
 
+  // Position/size changes are persisted via the existing PATCH
+  // /api/dashboards/:id/panels/:panelId endpoint (x/y/w/h were already
+  // columns on dashboard_panels and already supported by that route — this
+  // was purely a missing frontend, not a missing backend capability).
+  // Fire-and-forget: react-grid-layout already reflects the change
+  // optimistically in its own local state, so we don't need to block the
+  // UI on the round-trip or refetch the whole dashboard for a move/resize.
+  const savePanelLayout = useMutation({
+    mutationFn: async ({ panelId, x, y, w, h }: { panelId: string; x: number; y: number; w: number; h: number }) => {
+      await fetch(`/api/dashboards/${id}/panels/${panelId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ x, y, w, h }),
+      });
+    },
+  });
+
+  const layout: Layout[] = useMemo(
+    () => (data?.panels ?? []).map((p) => ({ i: p.id, x: p.x, y: p.y, w: p.w, h: p.h, minW: 2, minH: 2 })),
+    [data?.panels]
+  );
+
+  const handleLayoutInteractionEnd = useCallback(
+    (_layout: Layout[], oldItem: Layout, newItem: Layout) => {
+      if (oldItem.x === newItem.x && oldItem.y === newItem.y && oldItem.w === newItem.w && oldItem.h === newItem.h) return;
+      savePanelLayout.mutate({ panelId: newItem.i, x: newItem.x, y: newItem.y, w: newItem.w, h: newItem.h });
+    },
+    [savePanelLayout]
+  );
+
   return (
-    <Layout title={data?.dashboard.name ?? "Dashboard"}>
+    <PageLayout title={data?.dashboard.name ?? "Dashboard"}>
       <div className="mb-4 flex items-center justify-between">
         <button onClick={() => setAddOpen((o) => !o)} className="rounded border border-border px-3 py-1.5 text-sm text-muted hover:text-text">
           + add panel
@@ -108,22 +149,42 @@ export function DashboardDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {(data?.panels ?? []).map((panel) => (
-          <div key={panel.id} className="rounded border border-border bg-surface p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">{panel.title}</h3>
-              <button onClick={() => removePanel.mutate(panel.id)} className="text-xs text-faint hover:text-crit">
-                remove
-              </button>
+      <div className="dashboard-grid">
+        <ResponsiveGridLayout
+          className="layout"
+          layout={layout}
+          cols={GRID_COLS}
+          rowHeight={ROW_HEIGHT}
+          margin={[16, 16]}
+          draggableHandle=".panel-drag-handle"
+          onDragStop={handleLayoutInteractionEnd}
+          onResizeStop={handleLayoutInteractionEnd}
+          compactType="vertical"
+        >
+          {(data?.panels ?? []).map((panel) => (
+            <div key={panel.id} className="overflow-hidden rounded border border-border bg-surface">
+              <div className="panel-drag-handle flex cursor-move items-center justify-between border-b border-border-subtle px-4 py-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">{panel.title}</h3>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removePanel.mutate(panel.id);
+                  }}
+                  className="text-xs text-faint hover:text-crit"
+                >
+                  remove
+                </button>
+              </div>
+              <div className="h-[calc(100%-37px)] overflow-auto p-4">
+                {panel.error && <p className="text-xs text-crit">{panel.error}</p>}
+                {!panel.error && panel.result && <PanelChart chartType={panel.chartType} rows={panel.result.rows} />}
+              </div>
             </div>
-            {panel.error && <p className="text-xs text-crit">{panel.error}</p>}
-            {!panel.error && panel.result && <PanelChart chartType={panel.chartType} rows={panel.result.rows} />}
-          </div>
-        ))}
+          ))}
+        </ResponsiveGridLayout>
         {data && data.panels.length === 0 && <p className="text-sm text-faint">No panels yet — add one above.</p>}
       </div>
-    </Layout>
+    </PageLayout>
   );
 }
 
@@ -165,7 +226,7 @@ function PanelChart({ chartType, rows }: { chartType: string; rows: Record<strin
   const data = rows.map((r) => ({ ...r, label: r[xKey] !== undefined ? String(r[xKey]) : "" }));
 
   return (
-    <div style={{ height: 200 }}>
+    <div style={{ height: "100%", minHeight: 160 }}>
       <ResponsiveContainer width="100%" height="100%">
         {chartType === "bar" ? (
           <BarChart data={data}>

@@ -3,7 +3,7 @@ import { apiGet } from "../api-client.js";
 import { section, table, stat } from "../output.js";
 import { renderTimeSeries } from "../charts/timeseries.js";
 import { renderBarChart } from "../charts/bar.js";
-import { resolveChartStyle } from "../config.js";
+import { resolveChartStyle, isJsonMode } from "../config.js";
 
 interface SearchVsDirect {
   search: { queries: number; share: number };
@@ -53,6 +53,11 @@ export async function behavioralCommand(): Promise<void> {
     apiGet<SequenceFingerprint[]>("/api/behavioral/sequence-fingerprints"), // #79
     apiGet<TimeOfDay>("/api/analytics/time-of-day"), // #6 (hourly distribution feeding #46's routine detection)
   ]);
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify({ searchVsDirect, periodic, backgroundVsInteractive, routine, sessionOverlap, sequences, timeOfDay }, null, 2));
+    return;
+  }
 
   console.log(chalk.bold("\nBehavioral overview\n"));
   stat("Peak hour (UTC)", `${routine.peakHour}:00`, 28);

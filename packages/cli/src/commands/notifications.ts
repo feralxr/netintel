@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import type { Notification, NotificationSeverity } from "@netintel/shared";
 import { apiGet } from "../api-client.js";
+import { isJsonMode } from "../config.js";
 
 const SEVERITY_COLOR: Record<NotificationSeverity, (s: string) => string> = {
   info: chalk.blue,
@@ -10,6 +11,12 @@ const SEVERITY_COLOR: Record<NotificationSeverity, (s: string) => string> = {
 
 export async function notificationsCommand(): Promise<void> {
   const items = await apiGet<Notification[]>("/api/notifications?limit=30");
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify(items, null, 2));
+    return;
+  }
+
   console.log(chalk.bold(`\nNotifications (${items.length})\n`));
 
   if (items.length === 0) {

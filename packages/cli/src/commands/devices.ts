@@ -3,6 +3,7 @@ import chalk from "chalk";
 import type { Device } from "@netintel/shared";
 import { apiGet } from "../api-client.js";
 import { section, table, noDataNote } from "../output.js";
+import { isJsonMode } from "../config.js";
 
 interface IdleDevice {
   hostname: string | null;
@@ -25,6 +26,11 @@ export async function devicesCommand(): Promise<void> {
     apiGet<VendorHint[]>("/api/devices/vendor-hints"), // #72
     apiGet<RateRank[]>("/api/devices/rate-rank"), // #73
   ]);
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify({ devices, idle, vendors, rateRank }, null, 2));
+    return;
+  }
 
   console.log(chalk.bold(`\nLive devices on LAN (${devices.length})\n`));
 

@@ -3,7 +3,7 @@ import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
 import { renderTimeSeries } from "../charts/timeseries.js";
 import { renderBarChart } from "../charts/bar.js";
-import { resolveChartStyle } from "../config.js";
+import { resolveChartStyle, isJsonMode } from "../config.js";
 
 interface WeeklyReport {
   period: { from: string; to: string };
@@ -74,6 +74,11 @@ export async function reportCommand(): Promise<void> {
     apiGet<StorageFootprint>("/api/analytics/storage-footprint"), // #84
     apiGet<SeasonalDay[]>("/api/analytics/seasonal"), // #75
   ]);
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify({ weekly, monthly, fingerprint, momentum, churn, retention, toolUsage, storage, seasonal }, null, 2));
+    return;
+  }
 
   console.log(chalk.bold(`\nWeekly report (${weekly.period.from} → ${weekly.period.to})\n`));
   stat("Total queries", weekly.totalQueries.toLocaleString());

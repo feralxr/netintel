@@ -4,7 +4,7 @@ import { apiGet } from "../api-client.js";
 import { section, table, noDataNote } from "../output.js";
 import { renderTimeSeries } from "../charts/timeseries.js";
 import { renderBarChart } from "../charts/bar.js";
-import { resolveChartStyle } from "../config.js";
+import { resolveChartStyle, isJsonMode } from "../config.js";
 
 interface DomainResponse {
   record: { domain: string; firstSeen: string; lastSeen: string; queryCount: number; uniqueDays: number; lifecycleState: string | null };
@@ -34,6 +34,11 @@ export async function domainCommand(domain: string): Promise<void> {
     apiGet<Fragmentation>(`/api/domains/${encodeURIComponent(domain)}/fragmentation`), // #54
   ]);
   const { record, category, dailyHistory, recentQueries } = data;
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify({ record, category, dailyHistory, recentQueries, responseCodes, burstiness, fragmentation }, null, 2));
+    return;
+  }
 
   console.log(chalk.bold(`\n${record.domain}\n`));
   console.log(`  Total queries      ${chalk.cyan(record.queryCount)}`);

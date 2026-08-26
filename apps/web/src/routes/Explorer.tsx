@@ -16,7 +16,8 @@ import {
 import { Layout } from "../components/Layout";
 import { TimeRangeControl, useTimeRange } from "../components/TimeRange";
 import { CHART_GRID_COLOR, CHART_AXIS_COLOR, CHART_TOOLTIP_BG, CHART_TOOLTIP_BORDER } from "../components/charts/palette";
-import { runExplorerQuery, type Dimension, type QueryMetric, type FilterCondition, type QueryResult } from "../lib/explorer-api";
+import { FilterGroupEditor, emptyEditableGroup, toWireFilter, type EditableGroup } from "../components/FilterGroupEditor";
+import { runExplorerQuery, type Dimension, type QueryMetric, type QueryResult } from "../lib/explorer-api";
 
 const METRICS: { value: QueryMetric; label: string }[] = [
   { value: "count", label: "Count" },
@@ -41,24 +42,13 @@ const DIMENSIONS: Dimension[] = [
   "category",
 ];
 
-const OPERATORS: { value: FilterCondition["operator"]; label: string }[] = [
-  { value: "eq", label: "=" },
-  { value: "ne", label: "!=" },
-  { value: "gt", label: ">" },
-  { value: "lt", label: "<" },
-  { value: "gte", label: ">=" },
-  { value: "lte", label: "<=" },
-  { value: "contains", label: "contains" },
-];
-
 type ChartType = "table" | "line" | "bar" | "area";
 
 export function ExplorerPage() {
   const [range, setRange] = useTimeRange("24h");
   const [metric, setMetric] = useState<QueryMetric>("count");
   const [groupBy, setGroupBy] = useState<Dimension | "">("");
-  const [logic, setLogic] = useState<"AND" | "OR">("AND");
-  const [conditions, setConditions] = useState<FilterCondition[]>([]);
+  const [filter, setFilter] = useState<EditableGroup>(emptyEditableGroup());
   const [chartType, setChartType] = useState<ChartType>("table");
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -69,7 +59,7 @@ export function ExplorerPage() {
       runExplorerQuery({
         metric,
         groupBy: groupBy ? [groupBy] : undefined,
-        filter: conditions.length > 0 ? { logic, conditions } : undefined,
+        filter: toWireFilter(filter),
         timeRange: { from: range.from, to: range.to },
         interval: chartType === "table" ? null : range.interval,
       }),
@@ -86,7 +76,7 @@ export function ExplorerPage() {
           definition: {
             metric,
             groupBy: groupBy ? [groupBy] : undefined,
-            filter: conditions.length > 0 ? { logic, conditions } : undefined,
+            filter: toWireFilter(filter),
             timeRange: { from: range.from, to: range.to },
             interval: chartType === "table" ? null : range.interval,
           },
@@ -101,11 +91,6 @@ export function ExplorerPage() {
     },
   });
 
-  const addCondition = () => setConditions((c) => [...c, { dimension: "domain", operator: "eq", value: "" }]);
-  const updateCondition = (i: number, patch: Partial<FilterCondition>) =>
-    setConditions((c) => c.map((cond, idx) => (idx === i ? { ...cond, ...patch } : cond)));
-  const removeCondition = (i: number) => setConditions((c) => c.filter((_, idx) => idx !== i));
-
   const showApiCall = async () => {
     const res = await fetch("/api/explorer/query/curl", {
       method: "POST",
@@ -113,7 +98,7 @@ export function ExplorerPage() {
       body: JSON.stringify({
         metric,
         groupBy: groupBy ? [groupBy] : undefined,
-        filter: conditions.length > 0 ? { logic, conditions } : undefined,
+        filter: toWireFilter(filter),
         timeRange: { from: range.from, to: range.to },
         interval: chartType === "table" ? null : range.interval,
       }),
@@ -180,58 +165,8 @@ export function ExplorerPage() {
         <div className="mb-4">
           <div className="mb-2 flex items-center gap-2">
             <label className="text-[10px] uppercase tracking-wide text-faint">Filters</label>
-            {conditions.length > 1 && (
-              <select
-                value={logic}
-                onChange={(e) => setLogic(e.target.value as "AND" | "OR")}
-                className="rounded border border-border bg-bg px-1.5 py-0.5 text-xs text-text outline-none"
-              >
-                <option value="AND">AND</option>
-                <option value="OR">OR</option>
-              </select>
-            )}
-            <button onClick={addCondition} className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:text-accent">
-              + add filter
-            </button>
           </div>
-          <div className="flex flex-col gap-2">
-            {conditions.map((cond, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <select
-                  value={cond.dimension}
-                  onChange={(e) => updateCondition(i, { dimension: e.target.value as Dimension })}
-                  className="rounded border border-border bg-bg px-2 py-1 text-xs text-text outline-none"
-                >
-                  {DIMENSIONS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={cond.operator}
-                  onChange={(e) => updateCondition(i, { operator: e.target.value as FilterCondition["operator"] })}
-                  className="rounded border border-border bg-bg px-2 py-1 text-xs text-text outline-none"
-                >
-                  {OPERATORS.map((op) => (
-                    <option key={op.value} value={op.value}>
-                      {op.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={String(cond.value)}
-                  onChange={(e) => updateCondition(i, { value: e.target.value })}
-                  placeholder="value"
-                  className="w-40 rounded border border-border bg-bg px-2 py-1 text-xs text-text outline-none focus:border-accent"
-                />
-                <button onClick={() => removeCondition(i)} className="text-xs text-faint hover:text-crit">
-                  remove
-                </button>
-              </div>
-            ))}
-            {conditions.length === 0 && <p className="text-xs text-faint">No filters — querying all events in range.</p>}
-          </div>
+          <FilterGroupEditor root={filter} node={filter} onChange={setFilter} />
         </div>
 
         <div className="flex items-center gap-2">

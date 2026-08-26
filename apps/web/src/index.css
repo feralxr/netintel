@@ -21,3 +21,21 @@
 body {
   font-feature-settings: "tnum" 1; /* tabular numerals in a monospace UI */
 }
+
+/* react-grid-layout dashboard panels — override the library's default
+   light-theme resize handle/placeholder so they're visible against the
+   dark theme, and match the app's accent color instead of its own blue. */
+.react-grid-item.react-grid-placeholder {
+  background: theme("colors.accent") !important;
+  opacity: 0.15 !important;
+  border-radius: 0.25rem;
+}
+.react-resizable-handle {
+  opacity: 0.5;
+}
+.react-resizable-handle::after {
+  border-color: theme("colors.faint") !important;
+}
+.react-grid-item:hover .react-resizable-handle::after {
+  border-color: theme("colors.accent") !important;
+}

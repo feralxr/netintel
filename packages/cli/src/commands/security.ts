@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
 import { renderBarChart } from "../charts/bar.js";
+import { isJsonMode } from "../config.js";
 
 interface NxdomainAnalysis {
   totalQueries: number;
@@ -57,6 +58,11 @@ export async function securityCommand(): Promise<void> {
     apiGet<FailureBurstsResponse>("/api/security/failure-bursts"), // #59
     apiGet<BlocklistAttribution>("/api/security/blocklist-attribution"), // #60
   ]);
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify({ nxdomain, entropy, newDomains, baseline, suspiciousTlds, punycode, tunneling, failureBursts, blocklist }, null, 2));
+    return;
+  }
 
   console.log(chalk.bold("\nSecurity overview\n"));
   stat("NXDOMAIN rate", `${(nxdomain.nxRate * 100).toFixed(2)}%`);

@@ -3,7 +3,7 @@ import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
 import { renderTimeSeries } from "../charts/timeseries.js";
 import { renderBarChart } from "../charts/bar.js";
-import { resolveChartStyle } from "../config.js";
+import { resolveChartStyle, isJsonMode } from "../config.js";
 
 interface Distribution {
   mean: number;
@@ -84,6 +84,17 @@ export async function performanceCommand(): Promise<void> {
     apiGet<ResponseSizeResponse>("/api/performance/response-size"), // #68
     apiGet<RecursiveCachedDay[]>("/api/performance/recursive-cached-trend"), // #64
   ]);
+
+  if (isJsonMode()) {
+    console.log(
+      JSON.stringify(
+        { dnsPerf, cache, prefetch, upstream, reliability, clientLatency, retransmission, dnssec, protocolFeatures, responseSize, recursiveCachedTrend },
+        null,
+        2
+      )
+    );
+    return;
+  }
 
   console.log(chalk.bold("\nPerformance overview\n"));
   stat("Cache hit rate", `${(cache.cacheHitRate * 100).toFixed(1)}%`);

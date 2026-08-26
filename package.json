@@ -1,6 +1,6 @@
 {
   "name": "netintel",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Self-hosted DNS observability and network intelligence platform built on Technitium DNS Server.",
   "workspaces": [
@@ -13,7 +13,9 @@
     "build": "npm run build -w @netintel/shared && npm run build -w @netintel/server && npm run build -w @netintel/cli && npm run build -w @netintel/web",
     "db:generate": "npm run db:generate -w @netintel/server",
     "db:migrate": "npm run db:migrate -w @netintel/server",
-    "cli": "npm run start -w @netintel/cli --"
+    "cli": "npm run start -w @netintel/cli --",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=20"
@@ -21,5 +23,8 @@
   "os": [
     "win32",
     "linux"
-  ]
+  ],
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
 }

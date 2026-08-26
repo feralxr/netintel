@@ -2,7 +2,7 @@ import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
 import { renderTimeSeries } from "../charts/timeseries.js";
-import { resolveChartStyle } from "../config.js";
+import { resolveChartStyle, isJsonMode } from "../config.js";
 
 interface LeaseChurnDay {
   date: string;
@@ -36,6 +36,11 @@ export async function dhcpCommand(): Promise<void> {
     apiGet<IpContinuity>("/api/dhcp/ip-continuity"),
     apiGet<ActivityGapEntry[]>("/api/dhcp/activity-gap"),
   ]);
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify({ churn, duration, continuity, activityGap }, null, 2));
+    return;
+  }
 
   console.log(chalk.bold("\nDHCP overview\n"));
   stat("Returning device share", `${(continuity.returningShare * 100).toFixed(1)}%`);

@@ -48,4 +48,15 @@ export function resolveChartStyle(): ChartStyle {
   return loadConfig().chartStyle;
 }
 
+/**
+ * True if `--json` appears anywhere in argv. Same scanning approach as
+ * resolveChartStyle() above, so commands don't each need to declare their
+ * own --json option — when set, a command should print
+ * JSON.stringify(data, null, 2) of the exact data it already fetched
+ * instead of its normal chalk/table formatting, for scripting/piping.
+ */
+export function isJsonMode(): boolean {
+  return process.argv.includes("--json");
+}
+
 export { CONFIG_PATH };

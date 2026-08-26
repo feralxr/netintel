@@ -2,7 +2,7 @@ import chalk from "chalk";
 import { apiGet } from "../api-client.js";
 import { section, table, stat, noDataNote } from "../output.js";
 import { renderTimeSeries } from "../charts/timeseries.js";
-import { resolveChartStyle } from "../config.js";
+import { resolveChartStyle, isJsonMode } from "../config.js";
 
 interface Forecast {
   hasData: boolean;
@@ -54,6 +54,11 @@ export async function systemCommand(): Promise<void> {
     apiGet<RestartHistory>("/api/infrastructure/restarts"), // #99
     apiGet<CollectorHealth>("/api/infrastructure/collector-health"), // #100
   ]);
+
+  if (isJsonMode()) {
+    console.log(JSON.stringify({ queryVolume, dbSize, deviceCount, diskRunout, hostUtil, restarts, collectorHealth }, null, 2));
+    return;
+  }
 
   console.log(chalk.bold("\nSystem overview\n"));
   stat("Query volume (30d forecast)", queryVolume.hasData && queryVolume.projected30d !== null ? Math.round(queryVolume.projected30d).toLocaleString() : "no data yet", 30);

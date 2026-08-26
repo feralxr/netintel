@@ -1,16 +1,25 @@
 import chalk from "chalk";
 import WebSocket from "ws";
 import { BASE_URL } from "../api-client.js";
+import { isJsonMode } from "../config.js";
 
 export function watchCommand(): void {
+  const json = isJsonMode();
   const wsUrl = BASE_URL.replace(/^http/, "ws") + "/ws";
-  console.log(chalk.bold(`\nConnecting to live feed at ${wsUrl}\n`));
+  if (!json) console.log(chalk.bold(`\nConnecting to live feed at ${wsUrl}\n`));
 
   const socket = new WebSocket(wsUrl);
 
-  socket.on("open", () => console.log(chalk.green("connected — waiting for events (Ctrl+C to exit)\n")));
+  socket.on("open", () => {
+    if (!json) console.log(chalk.green("connected — waiting for events (Ctrl+C to exit)\n"));
+  });
 
   socket.on("message", (raw) => {
+    if (json) {
+      // One JSON object per line (NDJSON) — every raw event as-received, for piping into jq/scripts.
+      console.log(raw.toString());
+      return;
+    }
     try {
       const event = JSON.parse(raw.toString());
       if (event.type === "notification") {
@@ -27,12 +36,13 @@ export function watchCommand(): void {
   });
 
   socket.on("close", () => {
-    console.log(chalk.yellow("\nconnection closed"));
+    if (!json) console.log(chalk.yellow("\nconnection closed"));
     process.exit(0);
   });
 
   socket.on("error", (err) => {
-    console.error(chalk.red(`connection error: ${err.message}`));
+    if (json) console.error(JSON.stringify({ error: err.message }));
+    else console.error(chalk.red(`connection error: ${err.message}`));
     process.exit(1);
   });
 }
