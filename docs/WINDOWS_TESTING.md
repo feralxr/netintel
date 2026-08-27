@@ -13,6 +13,7 @@ Keep notes as you go (a plain text file is fine) — the final phase tells you e
 - [ ] A running Technitium DNS Server instance you can reach on your LAN, with an API token
   - Technitium web UI → **Administration → Sessions → Create Token**
   - You'll need the **web UI port** (default `5380`), not the DNS port (53)
+- [ ] **The "Query Logs (Sqlite)" app installed and enabled** in Technitium — **Administration → Apps** → confirm it shows as installed/enabled. This is not optional: netintel's collector calls this app's endpoint on every poll, hardcoded (`classPath: QueryLogsSqlite.App` in `technitium-client.ts`). Without it, everything downstream of Phase 2 will silently fail — `netintel status` will still show `Technitium reachable: yes` (that check hits an unrelated endpoint), which makes this an easy trap to miss if you skip straight to Phase 2.
 - [ ] Git installed, or download the repo as a zip from GitHub
 
 ---
@@ -64,7 +65,7 @@ Dev mode is faster to iterate on and easier to see errors from directly. Save th
 
 ## Phase 2 — Confirm real data is actually flowing
 
-Before testing any specific feature, make sure the collector is really pulling from your Technitium instance.
+Before testing any specific feature, make sure the collector is really pulling from your Technitium instance — not just that Technitium itself is reachable (those are different things; see Phase 0's note on the Query Logs app).
 
 1. Generate some real traffic — browse a few sites from any device on your network, or `nslookup example.com <technitium-ip>` a few times from the Windows machine itself.
 2. Wait ~30 seconds (default poll interval), then check:

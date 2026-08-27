@@ -114,6 +114,14 @@ Don't configure DHCP on the router at all — you'll disable the router's DHCP s
 
 A few settings specifically worth setting before moving on:
 
+### Query Logs (Sqlite) app — **required, netintel will not function without this**
+
+**Administration → Apps → App Store** (or **Apps** in older Technitium versions) → find **"Query Logs (Sqlite)"** → **Install**.
+
+This isn't optional and isn't just "more accurate metrics" — netintel's collector calls Technitium's `/api/logs/query` endpoint with `classPath: QueryLogsSqlite.App` on every single poll cycle, hardcoded. Without this app installed and enabled, that call fails and the collector has no query data at all — not "some metrics show no data," but netintel effectively does nothing.
+
+If it's already installed, open it once from **Apps** and confirm it's **Enabled**. There's no additional configuration needed beyond that — Technitium logs to it automatically once it's active.
+
 ### API token (required for netintel)
 
 **Administration → Sessions → Create Token.** Give it a name like `netintel`, copy the token somewhere safe — you'll need it for netintel's `NETINTEL_TECHNITIUM_TOKEN` environment variable. This token doesn't expire by default; you can revoke it later from the same screen if needed.
@@ -220,10 +228,11 @@ Checklist, roughly in order:
 1. **Technitium is reachable:** `http://<technitium-ip>:5380` loads in a browser.
 2. **A device gets Technitium as its DNS server:** on a client device, check its network settings (or run `ipconfig /all` on Windows / `resolvctl status` or `cat /etc/resolv.conf` on Linux) — DNS server should show your Technitium IP.
 3. **DNS actually resolves through it:** `nslookup google.com <technitium-ip>` from any device should return a real answer.
-4. **Technitium is logging queries:** in the Technitium web UI, **Query Logs**, you should see entries as you browse from any device.
-5. **netintel can reach Technitium:** `netintel status` should show `Technitium reachable: yes`.
-6. **netintel is collecting:** `netintel devices` should list your live devices after a minute or two; the Overview dashboard page should show non-zero query counts.
-7. **Notifications work:** connecting a new device to the LAN should produce a "New device joined the network" notification within a minute (`netintel notifications` or the dashboard bell).
+4. **Query Logs (Sqlite) app is installed and enabled:** Technitium web UI → **Administration → Apps** → confirm "Query Logs (Sqlite)" shows as installed/enabled. This is the one netintel actually depends on — see Part C. Don't skip this even if step 5 below shows entries; Technitium's built-in Query Logs *viewer* and the Sqlite app backing it are related but distinct, and it's the app specifically that netintel's collector calls.
+5. **Technitium is logging queries:** in the Technitium web UI, **Query Logs**, you should see entries as you browse from any device.
+6. **netintel is reachable:** `netintel status` should show `Technitium reachable: yes`. **Note this only confirms Technitium's API is up — it does not confirm query data is actually flowing** (it hits a lightweight session-check endpoint, unrelated to the Query Logs app). Don't stop here.
+7. **netintel is actually collecting query data:** browse from a device, wait ~10s (default poll interval), then run `netintel devices` — the device you just used should show up with a nonzero query count, and the Overview dashboard page should show non-zero query counts too. This is the step that actually confirms step 4 succeeded. If devices show but query counts stay at zero, go back to step 4.
+8. **Notifications work:** connecting a new device to the LAN should produce a "New device joined the network" notification within a minute (`netintel notifications` or the dashboard bell).
 
 If any step fails, jump to Part H.
 
@@ -235,7 +244,8 @@ If any step fails, jump to Part H.
 |---|---|---|
 | Devices don't use Technitium at all | DHCP change hasn't propagated | Reboot the router, or manually renew DHCP lease on the device (`ipconfig /release && ipconfig /renew` on Windows, reconnect Wi-Fi on phones) |
 | `netintel status` shows `Technitium reachable: no` | Wrong URL/token, or Technitium not running | Double check `NETINTEL_TECHNITIUM_URL` (must include `http://` and the port, e.g. `http://192.168.1.10:5380`), confirm the token wasn't revoked, confirm Technitium's service is actually running |
-| netintel shows devices but zero query activity | Collector polling interval hasn't fired yet, or Technitium's query logging is disabled | Wait ~10s (default poll interval); in Technitium, confirm **Settings → Logging → Enable Query Logging** is on |
+| `netintel status` shows `Technitium reachable: yes` but devices/queries never show up, or `netintel devices` stays empty | **Query Logs (Sqlite) app isn't installed/enabled** — this is the single most common setup gap. "Reachable" only confirms Technitium's session API responds; it says nothing about the Query Logs app the collector actually depends on | Technitium web UI → **Administration → Apps** → install/enable "Query Logs (Sqlite)" (see Part C). No other config is needed once it's active — give it ~10s after enabling for the next poll cycle |
+| netintel shows devices but zero query activity | Collector polling interval hasn't fired yet, or Technitium's query logging is disabled | Wait ~10s (default poll interval); in Technitium, confirm **Settings → Logging → Enable Query Logging** is on, and confirm the Query Logs (Sqlite) app is enabled (see row above) |
 | Dashboard loads but shows nothing / connection errors in browser console | Frontend isn't reaching the API — proxy misconfigured | If running dev servers, confirm `apps/web/vite.config.ts`'s proxy target matches your API port; in production, confirm your reverse proxy config (see the packaging READMEs) routes `/api` and `/ws` correctly |
 | A device's traffic never shows up in netintel at all | It's using an encrypted DNS path that bypasses Technitium (browser-builtin DoH, a VPN, etc.) | See Part F — this is exactly what network lockdown addresses. For VPN traffic specifically, see the honesty note at the bottom of `NETWORK_LOCKDOWN.md` — that one genuinely can't be fixed at the DNS layer |
 | Notifications aren't showing up in the dashboard live | WebSocket not connecting | Check the "live"/"connecting" badge in the dashboard's top bar; if stuck on "connecting," confirm your reverse proxy is passing through WebSocket upgrade headers (see the nginx example in the Linux packaging README) |

@@ -145,7 +145,7 @@ netintel watch --json >> netintel-events.ndjson
 
 ## Known data gaps
 
-A few fields are honestly reported as unavailable rather than guessed at, because they haven't been confirmed present in a real Technitium API response yet (or are confirmed absent from the fields netintel currently reads):
+**If every command shows zero/no data, this section isn't your problem** — that's almost always the Query Logs (Sqlite) app not being installed/enabled in Technitium (see [`docs/SETUP.md`](SETUP.md), Part C). The gaps below are narrower: specific fields that stay unavailable even with everything else working correctly, because they haven't been confirmed present in a real Technitium API response yet (or are confirmed absent from the fields netintel currently reads):
 
 - **DNSSEC validation rate** (`performance`) — not exposed by the query-log fields netintel reads.
 - **Response payload size** (`performance`) — same.

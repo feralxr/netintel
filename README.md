@@ -60,8 +60,9 @@ No Bun, no Docker required — plain Node.js was chosen specifically for solid W
 
 netintel only ever runs against a **real Technitium DNS Server** — there is no mock/demo mode. You need Technitium installed and reachable before running any of this (see [`docs/SETUP.md`](docs/SETUP.md) if you haven't set that up yet).
 
-1. In Technitium's web UI: **Administration → Sessions → Create Token**. Copy it.
-2. Clone and install:
+1. In Technitium's web UI: **Administration → Apps** → install and enable **"Query Logs (Sqlite)"**. **This step is not optional** — netintel's collector calls this app's endpoint on every poll, hardcoded; without it installed and enabled, netintel has no query data at all, not just reduced accuracy.
+2. **Administration → Sessions → Create Token**. Copy it.
+3. Clone and install:
 
 ```bash
 git clone <this-repo>
@@ -70,7 +71,7 @@ npm install
 npm run build
 ```
 
-3. Set up your config:
+4. Set up your config:
 
 ```bash
 cd packages/server
@@ -79,19 +80,19 @@ cp .env.example .env
 cd ../..
 ```
 
-4. Run database migrations:
+5. Run database migrations:
 
 ```bash
 npm run db:migrate
 ```
 
-5. Start the server:
+6. Start the server:
 
 ```bash
 npm run dev:server
 ```
 
-6. In a second terminal, start the dashboard:
+7. In a second terminal, start the dashboard:
 ```bash
 npm run dev:web
 ```
@@ -104,6 +105,8 @@ npm run start -- status
 ```
 
 If `netintel status` shows `Technitium reachable: no`, double-check the URL/token in your `.env`, then see the troubleshooting table in [`docs/SETUP.md`](docs/SETUP.md).
+
+If `netintel status` shows `Technitium reachable: yes` but `netintel devices` stays empty or shows zero query activity, that check only confirms Technitium's API is up — it says nothing about whether the Query Logs (Sqlite) app from step 1 is actually installed and enabled. Go back and check that first; it's the most common setup gap.
 
 **A few metrics are honestly reported as unavailable** rather than guessed at, because the fields they'd depend on haven't been confirmed present in a real Technitium API response yet (DNSSEC validation status, response payload size, EDNS0/TC-bit usage, CNAME chain depth's exact format). See [`docs/CLI.md`](docs/CLI.md#known-data-gaps) for the current list and [`docs/WINDOWS_TESTING.md`](docs/WINDOWS_TESTING.md) if you want to help confirm one of them against your own instance.
 
