@@ -151,7 +151,7 @@ This is the part you specifically asked about — here's every option, with the 
 2. Configure it identically to your primary (same upstream resolvers, same blocklists) — Technitium doesn't sync config between instances automatically in v1, so replicate settings by hand, or export/import config from **Administration → Backup/Restore** if both instances are on a compatible Technitium version.
 3. Router: Primary DNS = `192.168.1.10` (your primary), Secondary DNS = `192.168.1.11` (your fallback instance).
 
-**The netintel tradeoff — read this carefully:** netintel's collector in v1 points at **one** Technitium instance (`NETINTEL_TECHNITIUM_URL`). If you fail over to the secondary instance, netintel keeps polling the primary and simply sees no new traffic until the primary comes back — it does **not** automatically follow the failover or aggregate both instances. True multi-node aggregation is explicitly deferred to a future version (see the v1 bible, "Explicitly Deferred" section).
+**The netintel tradeoff — read this carefully:** netintel's collector points at **one** Technitium instance (`NETINTEL_TECHNITIUM_URL`). If you fail over to the secondary instance, netintel keeps polling the primary and simply sees no new traffic until the primary comes back — it does **not** automatically follow the failover or aggregate both instances. True multi-node aggregation isn't implemented yet.
 
 Practical options if you want real visibility during a failover with today's netintel:
 - Manually update `NETINTEL_TECHNITIUM_URL` in `.env` to point at whichever instance is currently active, and restart netintel — a real but manual step.
@@ -239,7 +239,7 @@ If any step fails, jump to Part H.
 | Dashboard loads but shows nothing / connection errors in browser console | Frontend isn't reaching the API — proxy misconfigured | If running dev servers, confirm `apps/web/vite.config.ts`'s proxy target matches your API port; in production, confirm your reverse proxy config (see the packaging READMEs) routes `/api` and `/ws` correctly |
 | A device's traffic never shows up in netintel at all | It's using an encrypted DNS path that bypasses Technitium (browser-builtin DoH, a VPN, etc.) | See Part F — this is exactly what network lockdown addresses. For VPN traffic specifically, see the honesty note at the bottom of `NETWORK_LOCKDOWN.md` — that one genuinely can't be fixed at the DNS layer |
 | Notifications aren't showing up in the dashboard live | WebSocket not connecting | Check the "live"/"connecting" badge in the dashboard's top bar; if stuck on "connecting," confirm your reverse proxy is passing through WebSocket upgrade headers (see the nginx example in the Linux packaging README) |
-| TTL / DNS latency / upstream comparison metrics always show "no data" | Expected in v1 against a real Technitium instance | This is a documented, known gap — see the README's "Known v1 limitation" note. Not a misconfiguration on your end. |
+| TTL / upstream comparison / CNAME depth metrics show "no data" | These specific fields' exact format is still unconfirmed against a live Technitium API response | Not a misconfiguration on your end — see [`docs/CLI.md`](CLI.md#known-data-gaps) for the current list. Note DNS latency itself (`responseRtt`) *is* confirmed working against a live v13+ instance running the Query Logs (Sqlite) app — if that specific one shows no data, check your Technitium version/app first. |
 
 ---
 
@@ -255,4 +255,4 @@ Follow Technitium's own uninstall instructions (uninstaller on Windows; on Linux
 
 ### Wipe netintel's data but keep it installed
 
-Stop the service, delete the database file (`NETINTEL_DATA_DIR`'s `netintel.db`, `.db-wal`, `.db-shm`), run migrations again (`npm run db:migrate` from `packages/server`), restart. Per the v1 bible, there's no partial-wipe/retention-window feature yet — it's all-or-nothing in v1.
+Stop the service, delete the database file (`NETINTEL_DATA_DIR`'s `netintel.db`, `.db-wal`, `.db-shm`), run migrations again (`npm run db:migrate` from `packages/server`), restart. There's no partial-wipe/retention-window feature yet — it's all-or-nothing.

@@ -24,7 +24,7 @@ const program = new Command();
 program
   .name("netintel")
   .description("Personal Network Intelligence CLI — self-hosted DNS observability, built on Technitium DNS Server.")
-  .version("1.4.0")
+  .version("1.4.1")
   .option("--chart <style>", `chart style for time-series charts: ${CHART_STYLES.join("|")} (overrides the persisted default for this run only)`)
   .option("--json", "print raw JSON instead of formatted output, for scripting/piping (watch prints one JSON object per line)");
 
