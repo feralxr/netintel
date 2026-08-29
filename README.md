@@ -48,7 +48,7 @@ netintel/
 
 ## Prerequisites
 
-- **Node.js 20+** (Windows: [nodejs.org](https://nodejs.org) installer; Linux: your distro's package or [nodesource](https://github.com/nodesource/distribution))
+- **Node.js 26+** (Windows: [nodejs.org](https://nodejs.org) installer; Linux: your distro's package or [nodesource](https://github.com/nodesource/distribution)). Note Node 26 doesn't reach official LTS status until October 20, 2026 — if you'd rather run something with a longer support track record, [Node 24 (current Active LTS)](https://nodejs.org/en/about/previous-releases) also works fine; adjust `engines.node` in the root `package.json` accordingly. Everything in this repo has actually been built and tested against Node 22 during development (the environment used to develop it didn't have a newer Node available) — Node 26 itself hasn't been runtime-verified against this codebase yet.
 - **Technitium DNS Server** running somewhere on your LAN, with an API token generated (Administration → Sessions → Create Token). See [`docs/SETUP.md`](docs/SETUP.md) for a full walkthrough, or [technitium.com/dns](https://technitium.com/dns/) for their own docs.
 - Git
 
@@ -106,7 +106,7 @@ npm run start -- status
 
 If `netintel status` shows `Technitium reachable: no`, double-check the URL/token in your `.env`, then see the troubleshooting table in [`docs/SETUP.md`](docs/SETUP.md).
 
-If `netintel status` shows `Technitium reachable: yes` but `netintel devices` stays empty or shows zero query activity, that check only confirms Technitium's API is up — it says nothing about whether the Query Logs (Sqlite) app from step 1 is actually installed and enabled. Go back and check that first; it's the most common setup gap.
+If `netintel status` shows `Technitium reachable: no`, run it again and look at the breakdown underneath — `session check`, `query logs`, and `dhcp leases` are tracked and reported separately, so it'll tell you exactly which one is failing rather than leaving you to guess. `query logs: failed` specifically means the Query Logs (Sqlite) app from step 1 isn't installed/enabled — go check that first, it's the most common setup gap.
 
 **A few metrics are honestly reported as unavailable** rather than guessed at, because the fields they'd depend on haven't been confirmed present in a real Technitium API response yet (DNSSEC validation status, response payload size, EDNS0/TC-bit usage, CNAME chain depth's exact format). See [`docs/CLI.md`](docs/CLI.md#known-data-gaps) for the current list and [`docs/WINDOWS_TESTING.md`](docs/WINDOWS_TESTING.md) if you want to help confirm one of them against your own instance.
 

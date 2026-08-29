@@ -1,6 +1,6 @@
 import "dotenv/config"; // must be first — loads .env before anything below reads process.env
 import { serve } from "@hono/node-server";
-import { app } from "./api/app.js";
+import { app, webDashboard } from "./api/app.js";
 import { attachWebSocket } from "./api/ws.js";
 import { Poller } from "./collector/poller.js";
 import { startAnalyticsScheduler } from "./analytics/scheduler.js";
@@ -23,6 +23,13 @@ async function main() {
 
   const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
     console.log(`[netintel] api listening on http://localhost:${info.port}`);
+    if (webDashboard.mounted) {
+      console.log(`[netintel] dashboard served at http://localhost:${info.port}/`);
+    } else {
+      console.log(
+        `[netintel] dashboard NOT served — no build found at ${webDashboard.distPath}. Run 'npm run build -w @netintel/web' to enable it, or serve apps/web/dist separately (see the packaging READMEs).`
+      );
+    }
   });
 
   recordServerStart(); // #99 — logged as soon as we're actually up, before the shutdown handler can fire

@@ -45,7 +45,18 @@ export function OverviewPage() {
       <div className="mb-6 flex items-center justify-between">
         <div className="grid flex-1 grid-cols-2 gap-4 md:grid-cols-4">
           <MetricCard label="Live devices" value={status?.liveDeviceCount ?? "–"} />
-          <MetricCard label="Technitium" value={status?.technitiumReachable ? "reachable" : "unreachable"} />
+          <MetricCard
+            label="Technitium"
+            value={
+              !status
+                ? "–"
+                : status.technitiumReachable
+                  ? "reachable"
+                  : !status.sessionCheckOk
+                    ? "unreachable"
+                    : "query logs down"
+            }
+          />
           <MetricCard label="Uptime" value={status ? `${status.uptimeSeconds}s` : "–"} />
           <MetricCard label="Database size" value={status ? `${(status.dbSizeBytes / 1024).toFixed(1)} KB` : "–"} />
         </div>

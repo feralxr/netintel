@@ -27,9 +27,14 @@ statusRoute.get("/", (c) => {
 
   const health = getTechnitiumHealth();
 
-  const status: EngineStatus & { technitiumLastError: string | null } = {
+  const status: EngineStatus = {
     technitiumReachable: health.reachable,
     technitiumLastError: health.lastError,
+    sessionCheckOk: health.sessionCheck.ok,
+    queryLogsWorking: health.queryLogs.ok,
+    queryLogsLastError: health.queryLogs.lastError,
+    queryLogsLastSuccessAt: health.queryLogs.lastSuccessAt,
+    dhcpLeasesWorking: health.dhcpLeases.ok,
     collectorRunning: true,
     liveDeviceCount,
     uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),

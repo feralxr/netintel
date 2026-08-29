@@ -1,7 +1,7 @@
 import { TechnitiumClient, type TechnitiumConfig } from "./technitium-client.js";
 import { ingestQueryLogEntry } from "./ingest.js";
 import { syncFromDhcpLeases } from "./identity.js";
-import { setTechnitiumHealth } from "./health.js";
+import { setSessionCheckHealth, setQueryLogsHealth, setDhcpLeasesHealth } from "./health.js";
 
 export interface PollerOptions extends TechnitiumConfig {
   queryLogIntervalMs?: number;
@@ -36,7 +36,7 @@ export class Poller {
   private async attemptConnect(): Promise<void> {
     const ok = await this.client.testConnection();
     if (!ok) {
-      setTechnitiumHealth(false, "cannot reach Technitium — will keep retrying in the background");
+      setSessionCheckHealth(false, "cannot reach Technitium — will keep retrying in the background");
       console.error(
         `[collector] cannot reach Technitium at ${this.opts.baseUrl} — dashboard/API stay up, ` +
           `retrying connection every ${(this.opts.connectRetryMs ?? 15000) / 1000}s`
@@ -45,7 +45,7 @@ export class Poller {
       return;
     }
 
-    setTechnitiumHealth(true);
+    setSessionCheckHealth(true);
     this.connected = true;
     console.log(`[collector] connected to Technitium at ${this.opts.baseUrl}`);
     this.startPolling();
@@ -61,10 +61,10 @@ export class Poller {
           ingestQueryLogEntry(entry);
           if (entry.rowNumber > this.lastRowNumber) this.lastRowNumber = entry.rowNumber;
         }
-        setTechnitiumHealth(true);
+        setQueryLogsHealth(true);
       } catch (err) {
         console.error("[collector] query log poll failed:", err);
-        setTechnitiumHealth(false, (err as Error).message);
+        setQueryLogsHealth(false, (err as Error).message);
       }
     };
 
@@ -72,10 +72,10 @@ export class Poller {
       try {
         const leases = await this.client.dhcpLeases();
         syncFromDhcpLeases(leases);
-        setTechnitiumHealth(true);
+        setDhcpLeasesHealth(true);
       } catch (err) {
         console.error("[collector] dhcp lease poll failed:", err);
-        setTechnitiumHealth(false, (err as Error).message);
+        setDhcpLeasesHealth(false, (err as Error).message);
       }
     };
 

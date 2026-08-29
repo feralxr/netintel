@@ -13,6 +13,10 @@ export async function statusCommand(): Promise<void> {
 
   console.log(chalk.bold("\nnetintel engine status\n"));
   console.log(`  Technitium reachable   ${status.technitiumReachable ? chalk.green("yes") : chalk.red("no")}`);
+  console.log(`    session check        ${status.sessionCheckOk ? chalk.green("ok") : chalk.red("failed")}`);
+  console.log(`    query logs           ${status.queryLogsWorking ? chalk.green("ok") : chalk.red("failed")}${!status.queryLogsWorking ? chalk.dim(" — check the Query Logs (Sqlite) app is installed & enabled in Technitium") : ""}`);
+  console.log(`    dhcp leases          ${status.dhcpLeasesWorking ? chalk.green("ok") : chalk.yellow("failed")}`);
+  if (status.technitiumLastError) console.log(chalk.dim(`    last error: ${status.technitiumLastError}`));
   console.log(`  Collector running      ${status.collectorRunning ? chalk.green("yes") : chalk.red("no")}`);
   console.log(`  Live devices           ${chalk.cyan(status.liveDeviceCount)}`);
   console.log(`  Uptime                 ${status.uptimeSeconds}s`);

@@ -21,6 +21,7 @@ import { infrastructureRoute } from "./routes/infrastructure.js";
 import { reportsRoute } from "./routes/reports.js";
 import { protocolRoute } from "./routes/protocol.js";
 import { dhcpRoute } from "./routes/dhcp.js";
+import { mountWebDashboard } from "./static-site.js";
 
 export const app = new Hono();
 
@@ -49,3 +50,9 @@ app.route("/api/infrastructure", infrastructureRoute);
 app.route("/api/reports", reportsRoute);
 app.route("/api/protocol", protocolRoute);
 app.route("/api/dhcp", dhcpRoute);
+
+// Serves the built web dashboard directly, so no separate static file
+// server/reverse proxy is needed for the common case — mounted last so it
+// can never shadow an /api/* route. Logged from index.ts at boot so it's
+// obvious in the console whether this actually took effect.
+export const webDashboard = mountWebDashboard(app);

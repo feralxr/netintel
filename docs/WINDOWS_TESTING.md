@@ -9,11 +9,11 @@ Keep notes as you go (a plain text file is fine) — the final phase tells you e
 ## Phase 0 — Prerequisites
 
 - [ ] Windows 10/11 machine (officially supported target — confirmed in `package.json`'s `"os"` field)
-- [ ] [Node.js 20+](https://nodejs.org) installed, confirm with `node --version` in PowerShell
+- [ ] [Node.js 26+](https://nodejs.org) installed, confirm with `node --version` in PowerShell. Also worth confirming `npm install` and `npm run build` complete cleanly on your actual Node version as part of this testing pass — the codebase targets Node 26 but was developed/tested against Node 22 (no newer Node was available in that environment), so real Node 26 runtime verification is one of the more valuable things this pass can confirm.
 - [ ] A running Technitium DNS Server instance you can reach on your LAN, with an API token
   - Technitium web UI → **Administration → Sessions → Create Token**
   - You'll need the **web UI port** (default `5380`), not the DNS port (53)
-- [ ] **The "Query Logs (Sqlite)" app installed and enabled** in Technitium — **Administration → Apps** → confirm it shows as installed/enabled. This is not optional: netintel's collector calls this app's endpoint on every poll, hardcoded (`classPath: QueryLogsSqlite.App` in `technitium-client.ts`). Without it, everything downstream of Phase 2 will silently fail — `netintel status` will still show `Technitium reachable: yes` (that check hits an unrelated endpoint), which makes this an easy trap to miss if you skip straight to Phase 2.
+- [ ] **The "Query Logs (Sqlite)" app installed and enabled** in Technitium — **Administration → Apps** → confirm it shows as installed/enabled. This is not optional: netintel's collector calls this app's endpoint on every poll, hardcoded (`classPath: QueryLogsSqlite.App` in `technitium-client.ts`). `netintel status` tracks this separately from basic reachability (look for `query logs: ok` vs `failed` in its output) specifically so a missing app shows up clearly rather than as a vague "unreachable."
 - [ ] Git installed, or download the repo as a zip from GitHub
 
 ---
@@ -23,10 +23,13 @@ Keep notes as you go (a plain text file is fine) — the final phase tells you e
 Dev mode is faster to iterate on and easier to see errors from directly. Save the NSSM/service install (`packaging/windows/install.ps1`) for after everything checks out here.
 
 1. Clone or download the repo, open **PowerShell** in the repo root.
-2. Install dependencies (this also compiles `better-sqlite3`'s native module for Windows — if this step fails, see Phase 8's native-module note):
+2. Install dependencies:
    ```powershell
    npm install
    ```
+   Watch for two specific things on Node 26, since neither has been confirmed yet:
+   - [ ] `better-sqlite3`'s native module — it ships prebuilt binaries for common Node/platform combos, but Node 26 is new enough that a prebuild may not exist yet for it, which would force a from-source compile (needing a C++ build toolchain). If `npm install` tries to compile from source and fails, note the exact error — that's real, valuable signal about Node 26 readiness, not a netintel bug to chase.
+   - [ ] Any other native-module dependency (check `npm install`'s output for `node-gyp` invocations) for the same reason.
 3. Build everything:
    ```powershell
    npm run build

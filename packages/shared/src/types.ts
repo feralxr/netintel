@@ -80,6 +80,14 @@ export interface ExportRequest {
 
 export interface EngineStatus {
   technitiumReachable: boolean;
+  technitiumLastError: string | null;
+  /** True only when Technitium's session API responds — does NOT confirm query data is flowing. See queryLogsWorking for that. */
+  sessionCheckOk: boolean;
+  /** True only when the Query Logs (Sqlite) app is confirmed working — this is what actually determines whether netintel has any data at all. */
+  queryLogsWorking: boolean;
+  queryLogsLastError: string | null;
+  queryLogsLastSuccessAt: string | null;
+  dhcpLeasesWorking: boolean;
   collectorRunning: boolean;
   liveDeviceCount: number;
   uptimeSeconds: number;
