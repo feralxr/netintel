@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: build+test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ["26"]
+        include:
+          # netintel's own development happened on Node 22 (no newer Node
+          # was available in that environment) — kept as an explicit,
+          # separately-labeled sanity job rather than silently dropped,
+          # since it's the one version this codebase has actually seen
+          # exercised outside of CI. Linux-only: the point is dependency/
+          # runtime-behavior coverage, not another OS combination.
+          - os: ubuntu-latest
+            node: "22"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Check docs/METRICS.md is in sync with the registry
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '26'
+        run: npm run docs:metrics:check -w @netintel/shared

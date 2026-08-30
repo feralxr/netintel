@@ -40,14 +40,31 @@ export function distribution(values: number[]): Distribution {
   if (values.length === 0) {
     return { mean: 0, median: 0, p25: 0, p75: 0, p95: 0, min: 0, max: 0, stddev: 0, count: 0 };
   }
+  // Single sort shared across every percentile lookup below, rather than
+  // percentile()'s own [...values].sort() being called 3 separate times
+  // (p25/p75/p95) — at real scale (hundreds of thousands of dns_events
+  // rows) that was 3x more sorting work than necessary for one call.
+  // min/max also no longer use Math.min(...values)/Math.max(...values):
+  // spreading a large array into a function call blows JS's call-stack
+  // argument limit and throws "Maximum call stack size exceeded" well
+  // before a real long-running install's event count would get there —
+  // confirmed by reproducing the crash directly against a 1M-row dataset.
+  const sorted = [...values].sort((a, b) => a - b);
+  const percentileOfSorted = (p: number): number => {
+    const idx = (p / 100) * (sorted.length - 1);
+    const lower = Math.floor(idx);
+    const upper = Math.ceil(idx);
+    if (lower === upper) return sorted[lower];
+    return sorted[lower] + (sorted[upper] - sorted[lower]) * (idx - lower);
+  };
   return {
     mean: mean(values),
-    median: median(values),
-    p25: percentile(values, 25),
-    p75: percentile(values, 75),
-    p95: percentile(values, 95),
-    min: Math.min(...values),
-    max: Math.max(...values),
+    median: percentileOfSorted(50),
+    p25: percentileOfSorted(25),
+    p75: percentileOfSorted(75),
+    p95: percentileOfSorted(95),
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
     stddev: stddev(values),
     count: values.length,
   };

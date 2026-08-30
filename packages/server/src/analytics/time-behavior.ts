@@ -113,7 +113,10 @@ export function sessionSummary(sessions: Session[]) {
     sessionCount: sessions.length,
     avgDurationMinutes: durations.reduce((a, b) => a + b, 0) / durations.length,
     medianDurationMinutes: durations.length % 2 === 0 ? (durations[mid - 1] + durations[mid]) / 2 : durations[mid],
-    longestDurationMinutes: Math.max(...durations),
+    // durations is already sorted above — no need to spread into Math.max
+    // (which both duplicates work and risks the call-stack argument limit
+    // on a device with a very long session history).
+    longestDurationMinutes: durations[durations.length - 1],
     avgQueriesPerSession: sessions.reduce((a, s) => a + s.queryCount, 0) / sessions.length,
     avgDomainsPerSession: sessions.reduce((a, s) => a + s.uniqueDomains, 0) / sessions.length,
     avgDiversity: sessions.reduce((a, s) => a + s.diversity, 0) / sessions.length,

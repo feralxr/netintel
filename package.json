@@ -1,6 +1,6 @@
 {
   "name": "netintel",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Self-hosted DNS observability and network intelligence platform built on Technitium DNS Server.",
   "workspaces": [

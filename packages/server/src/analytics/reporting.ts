@@ -7,7 +7,6 @@ import { domainDiversityAndRepeatRatio } from "./trends.js";
 import { timeOfDayBehavior } from "./time-behavior.js";
 import { dnsEvents, savedQueries, dashboards, reportSchedules } from "../db/schema.js";
 import fs from "node:fs";
-
 // -----------------------------------------------------------------------
 // Metric #47 — Weekly Internet Report
 // -----------------------------------------------------------------------
@@ -23,7 +22,11 @@ export function weeklyReport() {
   const thisQueries = sum(thisWeek, "queries");
   const lastQueries = sum(lastWeek, "queries");
 
-  const events = db.select({ timestamp: dnsEvents.timestamp }).from(dnsEvents).all();
+  // Scoped to this report's own week window rather than the entire
+  // table's history — cheaper (a week's rows, not months/years) and more
+  // semantically correct too (a "weekly report"'s peak/quiet hour should
+  // reflect that week, not all-time history).
+  const events = db.select({ timestamp: dnsEvents.timestamp }).from(dnsEvents).where(gte(dnsEvents.timestamp, weekAgo)).all();
   const timeOfDay = timeOfDayBehavior(events);
 
   return {

@@ -52,6 +52,33 @@ describe("distribution", () => {
     expect(d.mean).toBe(3);
     expect(d.median).toBe(3);
   });
+
+  it("does not crash on a large array — regression test for a real bug found via a 1M-row synthetic dataset", () => {
+    // The original implementation used Math.min(...values)/Math.max(...values),
+    // which spreads the whole array into a function call and throws
+    // "RangeError: Maximum call stack size exceeded" well before a real
+    // long-running install's event count would get there. Confirmed this
+    // reproduces reliably around a few hundred thousand elements on Node 22.
+    const large = Array.from({ length: 500_000 }, (_, i) => i);
+    expect(() => distribution(large)).not.toThrow();
+    const d = distribution(large);
+    expect(d.min).toBe(0);
+    expect(d.max).toBe(499_999);
+    expect(d.count).toBe(500_000);
+  });
+
+  it("single sorted-array-derived percentiles match the standalone percentile() function", () => {
+    // distribution() used to call percentile() three separate times, each
+    // re-sorting the array from scratch; it now sorts once internally and
+    // derives everything from that. This confirms the results are still
+    // identical to computing each percentile independently.
+    const values = [5, 1, 9, 3, 7, 2, 8, 4, 6, 10, 15, 12, 11, 14, 13];
+    const d = distribution(values);
+    expect(d.p25).toBeCloseTo(percentile(values, 25), 10);
+    expect(d.p75).toBeCloseTo(percentile(values, 75), 10);
+    expect(d.p95).toBeCloseTo(percentile(values, 95), 10);
+    expect(d.median).toBeCloseTo(percentile(values, 50), 10);
+  });
 });
 
 describe("shannonEntropy", () => {

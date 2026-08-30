@@ -82,7 +82,9 @@ export function cnameChainDepth() {
     hasData: true,
     note: "Heuristic: counts 'CNAME' occurrences in the raw answer text. UNCONFIRMED against a live instance — verify answer_data's real format before trusting these numbers.",
     avgDepth: depths.reduce((a, b) => a + b, 0) / depths.length,
-    maxDepth: Math.max(...depths),
+    // Not Math.max(...depths) — spreading a large array into a function
+    // call can exceed JS's call-stack argument limit at real scale.
+    maxDepth: depths.reduce((a, b) => Math.max(a, b), 0),
     sampleSize: depths.length,
   };
 }
